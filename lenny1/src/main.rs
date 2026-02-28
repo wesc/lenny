@@ -1,4 +1,5 @@
 mod actions;
+mod bot;
 mod config;
 mod context;
 mod dream;
@@ -7,6 +8,7 @@ mod once;
 mod tools;
 
 use clap::{Parser, Subcommand};
+use std::io::{self, BufReader};
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -73,7 +75,13 @@ async fn main() {
             println!("Hello, world!");
         }
         Command::BotCli => {
-            println!("Hello, world!");
+            let stdin = io::stdin();
+            let mut input = BufReader::new(stdin.lock());
+            let mut output = io::stdout();
+            if let Err(e) = bot::chat_loop(&config, &mut input, &mut output).await {
+                eprintln!("Error: {e}");
+                process::exit(1);
+            }
         }
     }
 }
