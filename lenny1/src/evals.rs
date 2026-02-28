@@ -137,7 +137,7 @@ const EVALS: &[Eval] = &[
 
 /// Build a Config that points at the eval fixtures, with a temp references dir.
 fn eval_config(base_config: &Config) -> Result<(Config, tempfile::TempDir)> {
-    let fixtures = PathBuf::from("evals/fixtures/basic");
+    let fixtures = PathBuf::from("tests/fixtures/basic-evals");
     let tmpdir = tempfile::tempdir()?;
 
     let config = Config {

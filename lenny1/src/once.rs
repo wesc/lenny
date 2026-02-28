@@ -202,7 +202,7 @@ fn save_turn(config: &Config, prompt: &str, result: &PromptResult) -> Result<()>
 
     let timestamp = chrono::Utc::now();
     let time_str = timestamp.format("%Y%m%d-%H%M%S").to_string();
-    let filename = format!("{}-{}.jsonl", time_str, result.slug);
+    let filename = format!("{}-{}.json", time_str, result.slug);
 
     let mut lines = Vec::new();
 

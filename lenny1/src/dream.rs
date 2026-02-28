@@ -1,33 +1,44 @@
 use anyhow::Result;
-use notify::{Event, RecursiveMode, Watcher};
+use notify_debouncer_full::{DebounceEventResult, new_debouncer, notify::RecursiveMode};
 use std::path::Path;
 use std::sync::mpsc;
+use std::time::Duration;
 
+use crate::actions;
 use crate::config::Config;
 
-/// Returns true if any component of the path starts with '.'
+const DEBOUNCE_SECS: u64 = 1;
+
 fn is_hidden_path(path: &Path) -> bool {
     path.components()
         .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
 }
 
-fn should_ignore_event(event: &Event) -> bool {
-    event.paths.iter().all(|p| is_hidden_path(p))
-}
-
 pub fn run(config: &Config) -> Result<()> {
-    let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
+    // Run all actions once at startup
+    eprintln!("Running initial actions...");
+    let n = actions::run_all(config)?;
+    if n > 0 {
+        eprintln!("{n} action(s) produced changes");
+    }
 
-    let mut watcher = notify::recommended_watcher(tx)?;
+    let (tx, rx) = mpsc::channel();
 
-    // Watch configured directories if they exist
+    let mut debouncer = new_debouncer(
+        Duration::from_secs(DEBOUNCE_SECS),
+        None,
+        move |result: DebounceEventResult| {
+            let _ = tx.send(result);
+        },
+    )?;
+
     for dir in [
         &config.system_dir,
         &config.dynamic_dir,
         &config.references_dir,
     ] {
         if dir.exists() {
-            watcher.watch(dir, RecursiveMode::Recursive)?;
+            debouncer.watch(dir, RecursiveMode::Recursive)?;
             eprintln!("Watching: {}", dir.display());
         } else {
             eprintln!("Directory not found, skipping: {}", dir.display());
@@ -38,13 +49,22 @@ pub fn run(config: &Config) -> Result<()> {
 
     for result in rx {
         match result {
-            Ok(event) => {
-                if !should_ignore_event(&event) {
-                    println!("Change detected: {event:?}");
+            Ok(events) => {
+                let dominated_events = events
+                    .into_iter()
+                    .filter(|e| e.event.paths.iter().any(|p| !is_hidden_path(p)));
+                let has_relevant = dominated_events.count() > 0;
+                if has_relevant {
+                    eprintln!("Changes detected, running actions...");
+                    if let Err(e) = actions::run_all(config) {
+                        eprintln!("Action error: {e}");
+                    }
                 }
             }
-            Err(e) => {
-                eprintln!("Watch error: {e}");
+            Err(errors) => {
+                for e in errors {
+                    eprintln!("Watch error: {e}");
+                }
             }
         }
     }
