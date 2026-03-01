@@ -9,13 +9,14 @@ use crate::config::{Config, ProviderConfig};
 use crate::context;
 use crate::tools::{
     AgentEvent, AgentHook, AgentState, FinalAnswerData, FinalAnswerTool, LookupReferenceTool,
-    RandomLetterTool, RandomNumberTool,
+    NoResponseTool, RandomLetterTool, RandomNumberTool,
 };
 
 /// Result of running a single prompt through the agent.
 pub struct PromptResult {
     pub answer: String,
     pub slug: String,
+    pub skipped: bool,
     pub events: Vec<AgentEvent>,
 }
 
@@ -33,6 +34,9 @@ async fn run_with_client<C: CompletionClient>(
     let final_answer = FinalAnswerTool {
         state: state.clone(),
     };
+    let no_response = NoResponseTool {
+        state: state.clone(),
+    };
     let lookup_ref = LookupReferenceTool {
         references_dir: config.references_dir.clone(),
     };
@@ -41,6 +45,7 @@ async fn run_with_client<C: CompletionClient>(
         .agent(model)
         .preamble(preamble)
         .tool(final_answer)
+        .tool(no_response)
         .tool(lookup_ref)
         .tool(RandomNumberTool)
         .tool(RandomLetterTool)
@@ -60,16 +65,25 @@ async fn run_with_client<C: CompletionClient>(
     match result {
         Err(PromptError::PromptCancelled { .. }) => {
             let mut st = state.lock().unwrap();
-            if let Some(mut data) = st.final_answer.take() {
+            if let Some(reason) = st.no_response.take() {
+                let events = std::mem::take(&mut st.events);
+                Ok(PromptResult {
+                    answer: reason,
+                    slug: "no-response".to_string(),
+                    skipped: true,
+                    events,
+                })
+            } else if let Some(mut data) = st.final_answer.take() {
                 data.slug = sanitize_slug(&data.slug);
                 let events = std::mem::take(&mut st.events);
                 Ok(PromptResult {
                     answer: data.answer,
                     slug: data.slug,
+                    skipped: false,
                     events,
                 })
             } else {
-                bail!("final_answer hook fired but no data captured");
+                bail!("hook fired but no data captured");
             }
         }
         Ok(text) => {
@@ -82,6 +96,7 @@ async fn run_with_client<C: CompletionClient>(
             Ok(PromptResult {
                 answer: data.answer,
                 slug: data.slug,
+                skipped: false,
                 events,
             })
         }
@@ -122,6 +137,7 @@ pub async fn run(config: &Config, user_prompt: &str) -> Result<()> {
         "prompt": user_prompt,
         "answer": result.answer,
         "slug": result.slug,
+        "skipped": result.skipped,
     });
     println!("{}", serde_json::to_string_pretty(&output)?);
 

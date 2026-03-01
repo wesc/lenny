@@ -79,6 +79,16 @@ fn check_random_letter(answer: &str, events: &[AgentEvent]) -> (bool, String) {
     )
 }
 
+fn check_no_response(_answer: &str, events: &[AgentEvent]) -> (bool, String) {
+    let used_tool = events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::ToolCall { tool, .. } if tool == "no_response"));
+    if !used_tool {
+        return (false, "did not call no_response tool".to_string());
+    }
+    (true, "called no_response tool".to_string())
+}
+
 fn check_multi_tool(answer: &str, events: &[AgentEvent]) -> (bool, String) {
     let used_number = events
         .iter()
@@ -134,6 +144,11 @@ const EVALS: &[Eval] = &[
         prompt: "Use the random_letter tool to get a random letter and the random_number tool to get a random number between 1 and 9, then concatenate them into a single string like 'x7'. Tell me the result.",
         check: check_multi_tool,
     },
+    Eval {
+        name: "no_response",
+        prompt: "Alice: hey Bob, did you see the game last night?\nBob: yeah it was great, what a finish",
+        check: check_no_response,
+    },
 ];
 
 /// Build a Config that points at the eval fixtures, with a temp references dir.
@@ -171,11 +186,7 @@ pub async fn run(base_config: &Config) -> Result<()> {
                 if pass {
                     passed += 1;
                 }
-                eprintln!(
-                    "{} ({:.1}s)",
-                    if pass { "PASS" } else { "FAIL" },
-                    elapsed
-                );
+                eprintln!("{} ({:.1}s)", if pass { "PASS" } else { "FAIL" }, elapsed);
                 json!({
                     "name": eval.name,
                     "prompt": eval.prompt,

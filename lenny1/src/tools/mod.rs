@@ -1,10 +1,12 @@
 mod final_answer;
 mod lookup_reference;
+mod no_response;
 mod random_letter;
 mod random_number;
 
 pub use final_answer::FinalAnswerTool;
 pub use lookup_reference::LookupReferenceTool;
+pub use no_response::NoResponseTool;
 pub use random_letter::RandomLetterTool;
 pub use random_number::RandomNumberTool;
 
@@ -42,6 +44,7 @@ pub struct FinalAnswerData {
 /// Shared mutable state passed to the hook and tools.
 pub struct AgentState {
     pub final_answer: Option<FinalAnswerData>,
+    pub no_response: Option<String>,
     pub events: Vec<AgentEvent>,
 }
 
@@ -49,6 +52,7 @@ impl AgentState {
     pub fn new() -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(Self {
             final_answer: None,
+            no_response: None,
             events: Vec::new(),
         }))
     }
@@ -102,6 +106,8 @@ impl<M: CompletionModel> PromptHook<M> for AgentHook {
         }
         if tool_name == "final_answer" {
             HookAction::terminate("final_answer called")
+        } else if tool_name == "no_response" {
+            HookAction::terminate("no_response called")
         } else {
             HookAction::cont()
         }
