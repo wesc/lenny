@@ -163,6 +163,7 @@ fn eval_config(base_config: &Config) -> Result<(Config, tempfile::TempDir)> {
         system_dir: fixtures.join("system"),
         dynamic_dir: fixtures.join("dynamic"),
         references_dir: tmpdir.path().to_path_buf(),
+        matrix: None,
     };
     Ok((config, tmpdir))
 }

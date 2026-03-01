@@ -37,6 +37,14 @@ impl ProviderConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct MatrixConfig {
+    pub homeserver: String,
+    pub username: String,
+    pub password: String,
+    pub store_path: PathBuf,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub provider: ProviderConfig,
@@ -50,6 +58,8 @@ pub struct Config {
     pub dynamic_dir: PathBuf,
     #[serde(default = "default_references_dir")]
     pub references_dir: PathBuf,
+    #[serde(default)]
+    pub matrix: Option<MatrixConfig>,
 }
 
 fn default_model() -> String {
@@ -80,6 +90,7 @@ impl Default for Config {
             system_dir: default_system_dir(),
             dynamic_dir: default_dynamic_dir(),
             references_dir: default_references_dir(),
+            matrix: None,
         }
     }
 }

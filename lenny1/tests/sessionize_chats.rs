@@ -15,6 +15,7 @@ fn make_config(tmpdir: &tempfile::TempDir) -> Config {
         system_dir: tmpdir.path().join("system"),
         dynamic_dir: dynamic,
         references_dir: refs,
+        matrix: None,
     }
 }
 
@@ -22,15 +23,19 @@ fn now_ts() -> i64 {
     chrono::Utc::now().timestamp()
 }
 
-fn write_chat(config: &Config, filename: &str, lines: &[serde_json::Value]) {
-    let chats_dir = config.references_dir.join("chats");
+fn write_ndjson(dir: &std::path::Path, filename: &str, lines: &[serde_json::Value]) {
+    fs::create_dir_all(dir).unwrap();
     let content: String = lines
         .iter()
         .map(|v| serde_json::to_string(v).unwrap())
         .collect::<Vec<_>>()
         .join("\n")
         + "\n";
-    fs::write(chats_dir.join(filename), content).unwrap();
+    fs::write(dir.join(filename), content).unwrap();
+}
+
+fn write_chat(config: &Config, filename: &str, lines: &[serde_json::Value]) {
+    write_ndjson(&config.references_dir.join("chats"), filename, lines);
 }
 
 fn read_session(config: &Config) -> Vec<serde_json::Value> {
@@ -209,8 +214,94 @@ fn no_chats_dir_returns_false() {
         system_dir: tmpdir.path().join("system"),
         dynamic_dir: dynamic,
         references_dir: tmpdir.path().join("references"), // no chats/ subdir
+        matrix: None,
     };
 
     let changed = sessionize_chats::run(&config).unwrap();
     assert!(!changed);
+}
+
+#[test]
+fn normalizes_millisecond_timestamps() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let config = make_config(&tmpdir);
+    let now = now_ts();
+    let now_ms = now * 1000; // Matrix-style millisecond timestamp
+
+    // Write a message with ms timestamp to chats
+    write_chat(
+        &config,
+        "matrix-room.json",
+        &[serde_json::json!({"timestamp": now_ms, "sender": "alice", "body": "ms timestamp"})],
+    );
+    // Write a message with normal seconds timestamp
+    write_chat(
+        &config,
+        "cli.json",
+        &[serde_json::json!({"timestamp": now - 10, "sender": "bob", "body": "sec timestamp"})],
+    );
+
+    sessionize_chats::run(&config).unwrap();
+
+    let session = read_session(&config);
+    assert_eq!(session.len(), 2);
+    // bob (now-10) should come before alice (now)
+    assert_eq!(session[0]["sender"], "bob");
+    assert_eq!(session[1]["sender"], "alice");
+}
+
+#[test]
+fn reads_matrix_messages() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let config = make_config(&tmpdir);
+    let now = now_ts();
+    let now_ms = now * 1000;
+
+    // Write to references/matrix/example.org/room.json
+    let matrix_host_dir = config.references_dir.join("matrix").join("example.org");
+    write_ndjson(
+        &matrix_host_dir,
+        "room.json",
+        &[serde_json::json!({
+            "timestamp": now_ms - 5000,
+            "sender": "@alice:example.org",
+            "body": "from matrix",
+            "room": "test-room",
+        })],
+    );
+
+    // Write to references/chats/cli.json
+    write_chat(
+        &config,
+        "cli.json",
+        &[serde_json::json!({"timestamp": now, "sender": "user", "body": "from cli"})],
+    );
+
+    sessionize_chats::run(&config).unwrap();
+
+    let session = read_session(&config);
+    assert_eq!(session.len(), 2);
+    // Matrix message (now-5 seconds) should come before CLI message (now)
+    assert_eq!(session[0]["sender"], "@alice:example.org");
+    assert_eq!(session[1]["sender"], "user");
+}
+
+#[test]
+fn skips_hidden_matrix_host_dirs() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let config = make_config(&tmpdir);
+    let now = now_ts();
+
+    // Hidden host dir should be skipped
+    let hidden_dir = config.references_dir.join("matrix").join(".hidden-host");
+    write_ndjson(
+        &hidden_dir,
+        "room.json",
+        &[
+            serde_json::json!({"timestamp": now * 1000, "sender": "hidden", "body": "should not appear"}),
+        ],
+    );
+
+    let changed = sessionize_chats::run(&config).unwrap();
+    assert!(!changed, "hidden matrix dir should be ignored");
 }

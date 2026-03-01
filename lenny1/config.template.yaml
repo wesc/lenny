@@ -14,3 +14,9 @@ thinking: false
 system_dir: "data/system"
 dynamic_dir: "data/dynamic"
 references_dir: "data/references"
+
+# matrix:
+#   homeserver: "https://api.filament.dm"
+#   username: "@user:api.filament.dm"
+#   password: "your-password"
+#   store_path: "data/matrix-store"

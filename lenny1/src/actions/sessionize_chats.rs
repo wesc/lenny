@@ -13,42 +13,29 @@ fn approx_tokens(s: &str) -> usize {
     s.split_whitespace().count()
 }
 
-/// Collect all NDJSON lines from references/chats/*.json,
-/// filter to last 7 days, keep most recent up to ~1000 tokens,
-/// write to dynamic/00-session.json.
+/// Collect all NDJSON lines from references/chats/*.json and
+/// references/matrix/**/*.json, filter to last 7 days, keep most
+/// recent up to ~1000 tokens, write to dynamic/00-session.json.
 pub fn run(config: &Config) -> Result<bool> {
-    let chats_dir = config.references_dir.join("chats");
-    if !chats_dir.exists() {
-        return Ok(false);
-    }
-
     let now = chrono::Utc::now().timestamp();
     let cutoff = now - MAX_AGE_SECS;
 
-    // Collect all utterance lines with their timestamps
     let mut utterances: Vec<(i64, String)> = Vec::new();
 
-    for entry in fs::read_dir(&chats_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.extension().is_none_or(|e| e != "json") {
-            continue;
-        }
-        if is_hidden(&path) {
-            continue;
-        }
-        let content = fs::read_to_string(&path)?;
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            // Parse just enough to extract the timestamp
-            if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
-                let ts = extract_timestamp(&obj);
-                if ts >= cutoff {
-                    utterances.push((ts, line.to_string()));
-                }
+    // Read from references/chats/*.json
+    let chats_dir = config.references_dir.join("chats");
+    if chats_dir.exists() {
+        collect_ndjson_lines(&chats_dir, false, cutoff, &mut utterances)?;
+    }
+
+    // Read from references/matrix/**/*.json (host subdirectories)
+    let matrix_dir = config.references_dir.join("matrix");
+    if matrix_dir.exists() {
+        for host_entry in fs::read_dir(&matrix_dir)? {
+            let host_entry = host_entry?;
+            let host_path = host_entry.path();
+            if host_path.is_dir() && !is_hidden(&host_path) {
+                collect_ndjson_lines(&host_path, false, cutoff, &mut utterances)?;
             }
         }
     }
@@ -102,21 +89,63 @@ pub fn run(config: &Config) -> Result<bool> {
     Ok(true)
 }
 
+/// Read all NDJSON *.json files from `dir` (non-recursive), collecting lines
+/// whose normalized timestamp >= `cutoff`.
+fn collect_ndjson_lines(
+    dir: &Path,
+    _recursive: bool,
+    cutoff: i64,
+    out: &mut Vec<(i64, String)>,
+) -> Result<()> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().is_none_or(|e| e != "json") {
+            continue;
+        }
+        if is_hidden(&path) {
+            continue;
+        }
+        let content = fs::read_to_string(&path)?;
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
+                let ts = extract_timestamp(&obj);
+                if ts >= cutoff {
+                    out.push((ts, line.to_string()));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn is_hidden(path: &Path) -> bool {
     path.file_name()
         .and_then(|n| n.to_str())
         .is_some_and(|n| n.starts_with('.'))
 }
 
+/// Millisecond threshold: timestamps above this are treated as milliseconds.
+const MS_THRESHOLD: i64 = 10_000_000_000;
+
 fn extract_timestamp(obj: &serde_json::Value) -> i64 {
     // Accept "timestamp" as either a unix int or a float
     if let Some(ts) = obj.get("timestamp") {
         if let Some(n) = ts.as_i64() {
-            return n;
+            return normalize_timestamp(n);
         }
         if let Some(n) = ts.as_f64() {
-            return n as i64;
+            return normalize_timestamp(n as i64);
         }
     }
     0
+}
+
+/// If `ts` looks like milliseconds (> ~year 2286 in seconds), convert to seconds.
+fn normalize_timestamp(ts: i64) -> i64 {
+    if ts > MS_THRESHOLD { ts / 1000 } else { ts }
 }

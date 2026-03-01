@@ -10,6 +10,7 @@ fn make_config(tmpdir: &tempfile::TempDir) -> Config {
         system_dir: tmpdir.path().join("system"),
         dynamic_dir: tmpdir.path().join("dynamic"),
         references_dir: tmpdir.path().join("references"),
+        matrix: None,
     }
 }
 
