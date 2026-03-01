@@ -1,5 +1,5 @@
 use lenny1::actions::sessionize_chats;
-use lenny1::config::Config;
+use lenny1::config::{Config, ProviderConfig};
 use std::fs;
 
 fn make_config(tmpdir: &tempfile::TempDir) -> Config {
@@ -9,13 +9,12 @@ fn make_config(tmpdir: &tempfile::TempDir) -> Config {
     fs::create_dir_all(&dynamic).unwrap();
 
     Config {
-        model: String::new(),
+        provider: ProviderConfig::default(),
         max_iterations: 1,
         thinking: false,
         system_dir: tmpdir.path().join("system"),
         dynamic_dir: dynamic,
         references_dir: refs,
-        ollama_url: String::new(),
     }
 }
 
@@ -204,13 +203,12 @@ fn no_chats_dir_returns_false() {
     fs::create_dir_all(&dynamic).unwrap();
 
     let config = Config {
-        model: String::new(),
+        provider: ProviderConfig::default(),
         max_iterations: 1,
         thinking: false,
         system_dir: tmpdir.path().join("system"),
         dynamic_dir: dynamic,
         references_dir: tmpdir.path().join("references"), // no chats/ subdir
-        ollama_url: String::new(),
     };
 
     let changed = sessionize_chats::run(&config).unwrap();

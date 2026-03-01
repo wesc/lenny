@@ -1,11 +1,11 @@
 use anyhow::{Result, bail};
 use rig::client::{CompletionClient, Nothing};
 use rig::completion::{Prompt, PromptError};
-use rig::providers::ollama;
+use rig::providers::{ollama, openrouter};
 use serde_json::json;
 use std::fs;
 
-use crate::config::Config;
+use crate::config::{Config, ProviderConfig};
 use crate::context;
 use crate::tools::{
     AgentEvent, AgentHook, AgentState, FinalAnswerData, FinalAnswerTool, LookupReferenceTool,
@@ -19,10 +19,15 @@ pub struct PromptResult {
     pub events: Vec<AgentEvent>,
 }
 
-/// Run a prompt through the agent and return structured result (no printing).
-pub async fn run_prompt(config: &Config, user_prompt: &str) -> Result<PromptResult> {
-    let preamble = context::assemble_context(&config.system_dir, &config.dynamic_dir)?;
-
+/// Build agent from any CompletionClient, run prompt, return structured result.
+async fn run_with_client<C: CompletionClient>(
+    client: C,
+    model: &str,
+    config: &Config,
+    preamble: &str,
+    user_prompt: &str,
+    additional_params: Option<serde_json::Value>,
+) -> Result<PromptResult> {
     let state = AgentState::new();
 
     let final_answer = FinalAnswerTool {
@@ -32,21 +37,20 @@ pub async fn run_prompt(config: &Config, user_prompt: &str) -> Result<PromptResu
         references_dir: config.references_dir.clone(),
     };
 
-    let client: ollama::Client = ollama::Client::builder()
-        .api_key(Nothing)
-        .base_url(&config.ollama_url)
-        .build()?;
-
-    let agent = client
-        .agent(&config.model)
-        .preamble(&preamble)
+    let mut builder = client
+        .agent(model)
+        .preamble(preamble)
         .tool(final_answer)
         .tool(lookup_ref)
         .tool(RandomNumberTool)
         .tool(RandomLetterTool)
-        .default_max_turns(config.max_iterations)
-        .additional_params(json!({"think": config.thinking}))
-        .build();
+        .default_max_turns(config.max_iterations);
+
+    if let Some(params) = additional_params {
+        builder = builder.additional_params(params);
+    }
+
+    let agent = builder.build();
 
     let hook = AgentHook {
         state: state.clone(),
@@ -86,6 +90,26 @@ pub async fn run_prompt(config: &Config, user_prompt: &str) -> Result<PromptResu
         }
         Err(e) => {
             bail!("{e}");
+        }
+    }
+}
+
+/// Run a prompt through the agent and return structured result (no printing).
+pub async fn run_prompt(config: &Config, user_prompt: &str) -> Result<PromptResult> {
+    let preamble = context::assemble_context(&config.system_dir, &config.dynamic_dir)?;
+
+    match &config.provider {
+        ProviderConfig::Ollama { url, model } => {
+            let client: ollama::Client = ollama::Client::builder()
+                .api_key(Nothing)
+                .base_url(url)
+                .build()?;
+            let params = Some(json!({"think": config.thinking}));
+            run_with_client(client, model, config, &preamble, user_prompt, params).await
+        }
+        ProviderConfig::OpenRouter { api_key, model } => {
+            let client: openrouter::Client = openrouter::Client::new(api_key)?;
+            run_with_client(client, model, config, &preamble, user_prompt, None).await
         }
     }
 }

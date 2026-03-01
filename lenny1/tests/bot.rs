@@ -1,16 +1,15 @@
 use lenny1::bot::save_chat_file;
-use lenny1::config::Config;
+use lenny1::config::{Config, ProviderConfig};
 use std::fs;
 
 fn make_config(tmpdir: &tempfile::TempDir) -> Config {
     Config {
-        model: String::new(),
+        provider: ProviderConfig::default(),
         max_iterations: 1,
         thinking: false,
         system_dir: tmpdir.path().join("system"),
         dynamic_dir: tmpdir.path().join("dynamic"),
         references_dir: tmpdir.path().join("references"),
-        ollama_url: String::new(),
     }
 }
 

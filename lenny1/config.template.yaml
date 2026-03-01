@@ -1,0 +1,16 @@
+provider:
+  type: "ollama"
+  url: "http://localhost:11434"
+  model: "qwen3:1.7b"
+
+# provider:
+#   type: "openrouter"
+#   api_key: "sk-or-v1-..."
+#   model: "openai/gpt-oss-20b"
+
+max_iterations: 5
+thinking: false
+
+system_dir: "data/system"
+dynamic_dir: "data/dynamic"
+references_dir: "data/references"

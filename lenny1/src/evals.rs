@@ -2,6 +2,7 @@ use anyhow::Result;
 use regex::Regex;
 use serde_json::json;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use crate::config::Config;
 use crate::once;
@@ -141,13 +142,12 @@ fn eval_config(base_config: &Config) -> Result<(Config, tempfile::TempDir)> {
     let tmpdir = tempfile::tempdir()?;
 
     let config = Config {
-        model: base_config.model.clone(),
+        provider: base_config.provider.clone(),
         max_iterations: base_config.max_iterations,
         thinking: base_config.thinking,
         system_dir: fixtures.join("system"),
         dynamic_dir: fixtures.join("dynamic"),
         references_dir: tmpdir.path().to_path_buf(),
-        ollama_url: base_config.ollama_url.clone(),
     };
     Ok((config, tmpdir))
 }
@@ -158,17 +158,24 @@ pub async fn run(base_config: &Config) -> Result<()> {
     let mut results = Vec::new();
     let mut passed = 0;
     let total = EVALS.len();
+    let run_start = Instant::now();
 
     for eval in EVALS {
         eprint!("  {} ... ", eval.name);
 
+        let eval_start = Instant::now();
         let outcome = match once::run_prompt(&config, eval.prompt).await {
             Ok(result) => {
+                let elapsed = eval_start.elapsed().as_secs_f64();
                 let (pass, reason) = (eval.check)(&result.answer, &result.events);
                 if pass {
                     passed += 1;
                 }
-                eprintln!("{}", if pass { "PASS" } else { "FAIL" });
+                eprintln!(
+                    "{} ({:.1}s)",
+                    if pass { "PASS" } else { "FAIL" },
+                    elapsed
+                );
                 json!({
                     "name": eval.name,
                     "prompt": eval.prompt,
@@ -176,10 +183,12 @@ pub async fn run(base_config: &Config) -> Result<()> {
                     "pass": pass,
                     "reason": reason,
                     "events": result.events.len(),
+                    "elapsed_s": (elapsed * 10.0).round() / 10.0,
                 })
             }
             Err(e) => {
-                eprintln!("ERROR");
+                let elapsed = eval_start.elapsed().as_secs_f64();
+                eprintln!("ERROR ({elapsed:.1}s)");
                 json!({
                     "name": eval.name,
                     "prompt": eval.prompt,
@@ -187,6 +196,7 @@ pub async fn run(base_config: &Config) -> Result<()> {
                     "pass": false,
                     "reason": format!("error: {e}"),
                     "events": 0,
+                    "elapsed_s": (elapsed * 10.0).round() / 10.0,
                 })
             }
         };
@@ -194,11 +204,13 @@ pub async fn run(base_config: &Config) -> Result<()> {
         results.push(outcome);
     }
 
-    eprintln!("\n  {passed}/{total} passed");
+    let total_elapsed = run_start.elapsed().as_secs_f64();
+    eprintln!("\n  {passed}/{total} passed in {total_elapsed:.1}s");
 
     let output = json!({
         "passed": passed,
         "total": total,
+        "elapsed_s": (total_elapsed * 10.0).round() / 10.0,
         "results": results,
     });
     println!("{}", serde_json::to_string_pretty(&output)?);

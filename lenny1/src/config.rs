@@ -3,10 +3,43 @@ use serde::Deserialize;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type")]
+pub enum ProviderConfig {
+    #[serde(rename = "ollama")]
+    Ollama {
+        #[serde(default = "default_ollama_url")]
+        url: String,
+        #[serde(default = "default_model")]
+        model: String,
+    },
+    #[serde(rename = "openrouter")]
+    OpenRouter { api_key: String, model: String },
+}
+
+impl Default for ProviderConfig {
+    fn default() -> Self {
+        ProviderConfig::Ollama {
+            url: default_ollama_url(),
+            model: default_model(),
+        }
+    }
+}
+
+impl ProviderConfig {
+    #[allow(dead_code)]
+    pub fn model(&self) -> &str {
+        match self {
+            ProviderConfig::Ollama { model, .. } => model,
+            ProviderConfig::OpenRouter { model, .. } => model,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-    #[serde(default = "default_model")]
-    pub model: String,
+    #[serde(default)]
+    pub provider: ProviderConfig,
     #[serde(default = "default_max_iterations")]
     pub max_iterations: usize,
     #[serde(default)]
@@ -17,8 +50,6 @@ pub struct Config {
     pub dynamic_dir: PathBuf,
     #[serde(default = "default_references_dir")]
     pub references_dir: PathBuf,
-    #[serde(default = "default_ollama_url")]
-    pub ollama_url: String,
 }
 
 fn default_model() -> String {
@@ -43,13 +74,12 @@ fn default_ollama_url() -> String {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            model: default_model(),
+            provider: ProviderConfig::default(),
             max_iterations: default_max_iterations(),
             thinking: false,
             system_dir: default_system_dir(),
             dynamic_dir: default_dynamic_dir(),
             references_dir: default_references_dir(),
-            ollama_url: default_ollama_url(),
         }
     }
 }
