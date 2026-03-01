@@ -36,7 +36,7 @@ pub async fn chat_loop<R: BufRead, W: Write>(
         let ts = chrono::Utc::now().timestamp();
         let result = once::run_prompt(config, line).await?;
 
-        writeln!(output, "{}", result.answer)?;
+        writeln!(output, "\n\x1b[38;5;245m{}\x1b[0m\n", result.answer)?;
 
         lines.push(serde_json::to_string(&serde_json::json!({
             "timestamp": ts,
