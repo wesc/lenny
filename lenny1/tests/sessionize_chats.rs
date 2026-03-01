@@ -287,6 +287,31 @@ fn reads_matrix_messages() {
 }
 
 #[test]
+fn deduplicates_by_id() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let config = make_config(&tmpdir);
+    let now = now_ts();
+
+    // Two lines with the same id but different timestamps/bodies
+    write_chat(
+        &config,
+        "room.json",
+        &[
+            serde_json::json!({"id": "dup-1", "timestamp": now - 100, "sender": "alice", "body": "first"}),
+            serde_json::json!({"id": "dup-1", "timestamp": now - 50, "sender": "alice", "body": "duplicate"}),
+            serde_json::json!({"id": "dup-2", "timestamp": now, "sender": "bob", "body": "unique"}),
+        ],
+    );
+
+    sessionize_chats::run(&config).unwrap();
+
+    let session = read_session(&config);
+    assert_eq!(session.len(), 2, "duplicate id should be removed");
+    assert_eq!(session[0]["body"], "first", "first occurrence kept");
+    assert_eq!(session[1]["body"], "unique");
+}
+
+#[test]
 fn skips_hidden_matrix_host_dirs() {
     let tmpdir = tempfile::tempdir().unwrap();
     let config = make_config(&tmpdir);

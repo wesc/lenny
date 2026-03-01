@@ -196,6 +196,7 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
             // Spawn all heavy work (file I/O, member lookup, LLM) off the sync loop
             let mentioned = is_mentioned(&event, &bot_user_id, &body);
             let event_sender = event.sender.clone();
+            let event_id = event.event_id.to_string();
             let timestamp: u64 = event.origin_server_ts.0.into();
 
             tokio::spawn(async move {
@@ -208,6 +209,7 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
                     .and_then(|m| m.display_name().map(|s| s.to_owned()));
 
                 let line = json!({
+                    "id": event_id,
                     "timestamp": timestamp,
                     "sender": sender,
                     "sender_name": sender_name,
@@ -251,12 +253,14 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
                         let session_id = format!("matrix-{sanitized_id}");
                         let ts = chrono::Utc::now().timestamp();
                         let user_line = serde_json::to_string(&json!({
+                            "id": uuid::Uuid::new_v4().to_string(),
                             "timestamp": ts,
                             "sender": sender,
                             "body": body,
                         }))
                         .unwrap();
                         let bot_line = serde_json::to_string(&json!({
+                            "id": uuid::Uuid::new_v4().to_string(),
                             "timestamp": chrono::Utc::now().timestamp(),
                             "sender": "lennybot",
                             "body": result.answer,
@@ -288,11 +292,13 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
 
             eprintln!("[{room_name}] {sender} reacted {emoji} to {reacts_to}");
 
+            let event_id = event.event_id.to_string();
             let timestamp: u64 = event.origin_server_ts.0.into();
             let room_id = room.room_id().to_string();
 
             tokio::spawn(async move {
                 let line = json!({
+                    "id": event_id,
                     "timestamp": timestamp,
                     "sender": sender,
                     "type": "reaction",

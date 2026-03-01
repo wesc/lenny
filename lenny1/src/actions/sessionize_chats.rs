@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -21,11 +22,12 @@ pub fn run(config: &Config) -> Result<bool> {
     let cutoff = now - MAX_AGE_SECS;
 
     let mut utterances: Vec<(i64, String)> = Vec::new();
+    let mut seen_ids: HashSet<String> = HashSet::new();
 
     // Read from references/chats/*.json
     let chats_dir = config.references_dir.join("chats");
     if chats_dir.exists() {
-        collect_ndjson_lines(&chats_dir, false, cutoff, &mut utterances)?;
+        collect_ndjson_lines(&chats_dir, false, cutoff, &mut seen_ids, &mut utterances)?;
     }
 
     // Read from references/matrix/**/*.json (host subdirectories)
@@ -35,7 +37,7 @@ pub fn run(config: &Config) -> Result<bool> {
             let host_entry = host_entry?;
             let host_path = host_entry.path();
             if host_path.is_dir() && !is_hidden(&host_path) {
-                collect_ndjson_lines(&host_path, false, cutoff, &mut utterances)?;
+                collect_ndjson_lines(&host_path, false, cutoff, &mut seen_ids, &mut utterances)?;
             }
         }
     }
@@ -95,6 +97,7 @@ fn collect_ndjson_lines(
     dir: &Path,
     _recursive: bool,
     cutoff: i64,
+    seen_ids: &mut HashSet<String>,
     out: &mut Vec<(i64, String)>,
 ) -> Result<()> {
     for entry in fs::read_dir(dir)? {
@@ -113,6 +116,12 @@ fn collect_ndjson_lines(
                 continue;
             }
             if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
+                // De-duplicate by id: skip lines whose id we've already seen
+                if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
+                    if !seen_ids.insert(id.to_string()) {
+                        continue;
+                    }
+                }
                 let ts = extract_timestamp(&obj);
                 if ts >= cutoff {
                     out.push((ts, line.to_string()));
