@@ -228,7 +228,7 @@ fn normalizes_millisecond_timestamps() {
     let now = now_ts();
     let now_ms = now * 1000; // Matrix-style millisecond timestamp
 
-    // Write a message with ms timestamp to chats
+    // Write a message with ms timestamp
     write_chat(
         &config,
         "matrix-room.json",
@@ -237,7 +237,7 @@ fn normalizes_millisecond_timestamps() {
     // Write a message with normal seconds timestamp
     write_chat(
         &config,
-        "cli.json",
+        "other-room.json",
         &[serde_json::json!({"timestamp": now - 10, "sender": "bob", "body": "sec timestamp"})],
     );
 
@@ -265,25 +265,31 @@ fn reads_matrix_messages() {
         &[serde_json::json!({
             "timestamp": now_ms - 5000,
             "sender": "@alice:example.org",
-            "body": "from matrix",
+            "body": "from matrix host 1",
             "room": "test-room",
         })],
     );
 
-    // Write to references/chats/cli.json
-    write_chat(
-        &config,
-        "cli.json",
-        &[serde_json::json!({"timestamp": now, "sender": "user", "body": "from cli"})],
+    // Write to references/matrix/other.org/room.json
+    let matrix_host_dir2 = config.references_dir.join("matrix").join("other.org");
+    write_ndjson(
+        &matrix_host_dir2,
+        "room.json",
+        &[serde_json::json!({
+            "timestamp": now_ms,
+            "sender": "@bob:other.org",
+            "body": "from matrix host 2",
+            "room": "other-room",
+        })],
     );
 
     sessionize_chats::run(&config).unwrap();
 
     let session = read_session(&config);
     assert_eq!(session.len(), 2);
-    // Matrix message (now-5 seconds) should come before CLI message (now)
+    // First host message (now-5s) should come before second host message (now)
     assert_eq!(session[0]["sender"], "@alice:example.org");
-    assert_eq!(session[1]["sender"], "user");
+    assert_eq!(session[1]["sender"], "@bob:other.org");
 }
 
 #[test]

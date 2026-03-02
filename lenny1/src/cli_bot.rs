@@ -8,9 +8,8 @@ use crate::once;
 /// Run an interactive chat loop, reading from `input` and writing to `output`.
 ///
 /// Each line triggers a fresh agent call via `once::run_prompt`. Chat history
-/// is persisted as NDJSON to `references/chats/{session_id}.json` after each
-/// turn so the dream watcher can sessionize it into dynamic context before the
-/// user's next input.
+/// is persisted as NDJSON to `dynamic/cli-bot/{session_id}.json` so it appears
+/// directly in assembled context.
 pub async fn chat_loop<R: BufRead, W: Write>(
     config: &Config,
     input: &mut R,
@@ -54,7 +53,7 @@ pub async fn chat_loop<R: BufRead, W: Write>(
             }))?);
         }
 
-        save_chat_file(config, &session_id, &lines)?;
+        save_dynamic_chat(config, "cli-bot", &session_id, &lines)?;
     }
 
     Ok(())
@@ -70,6 +69,28 @@ pub fn save_chat_file(config: &Config, session_id: &str, lines: &[String]) -> Re
     let tmp_name = format!(".tmp-{}", uuid::Uuid::new_v4());
     let tmp_path = chats_dir.join(&tmp_name);
     let final_path = chats_dir.join(format!("{session_id}.json"));
+
+    fs::write(&tmp_path, &content)?;
+    fs::rename(&tmp_path, &final_path)?;
+
+    Ok(())
+}
+
+/// Atomically write accumulated NDJSON chat lines to `dynamic/{subdir}/{session_id}.json`.
+pub fn save_dynamic_chat(
+    config: &Config,
+    subdir: &str,
+    session_id: &str,
+    lines: &[String],
+) -> Result<()> {
+    let target_dir = config.dynamic_dir.join(subdir);
+    fs::create_dir_all(&target_dir)?;
+
+    let content = lines.join("\n") + "\n";
+
+    let tmp_name = format!(".tmp-{}", uuid::Uuid::new_v4());
+    let tmp_path = target_dir.join(&tmp_name);
+    let final_path = target_dir.join(format!("{session_id}.json"));
 
     fs::write(&tmp_path, &content)?;
     fs::rename(&tmp_path, &final_path)?;

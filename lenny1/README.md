@@ -4,20 +4,22 @@ The Lenny1 agent is an initial exploration of CAA, but focused on a [file over a
 
 ## Directory Hierarchy
 
-We start with three top level directories, both of which can have an arbitrary number of subdirectories:
+We start with three top level directories, each of which can have an arbitrary number of subdirectories:
 
-- `system/`: immutable context inserted on every call to the LLM
-- `dynamic/`: mutable context inserted on every call to the LLM
-- `references/`: immutable context accessed via tool calls and background processing
+- `system/`: immutable preambles and identity context, inserted on every call to the LLM
+- `dynamic/`: mutable working memory inserted on every call to the LLM — bots write directly here with namespaced paths (e.g. `dynamic/cli-bot/`, `dynamic/10-session.json`)
+- `references/`: immutable context accessed via tool calls and background processing (e.g. `references/matrix/`, `references/chats/`, `references/turns/`)
 
 "Immutable" in this context means that the agent is not allowed to manipulate it, and "mutable" means the agent or one of its background processes can rewrite it at will.
+
+Context assembly order: all `system/` files first (sorted by relative path), then all `dynamic/` files (sorted by relative path). This means preambles like `system/cli-bot/00-preamble.txt` always appear before their corresponding data in `dynamic/cli-bot/cli-20260302-143000.json`. The LLM connects them via their shared path namespace.
 
 ## Commands
 
 - `once <prompt>` — Run a single prompt through the agent and print the answer.
 - `dream` — Watch `system/`, `dynamic/`, and `references/` for changes and run background actions (e.g. sessionize chats).
 - `matrix-bot` — Connect to Matrix via sliding sync and respond to mentions. Logs all room messages/reactions as NDJSON.
-- `cli-bot` — Interactive CLI chat loop. Persists chat history as NDJSON for the dream watcher to sessionize.
+- `cli-bot` — Interactive CLI chat loop. Persists chat history as NDJSON directly to `dynamic/cli-bot/`.
 - `eval-basic` — Run basic eval battery against fixture data and print results as JSON.
 
 ## Loop Agent
@@ -33,3 +35,18 @@ The processing loop goes like this:
 ## Dreaming
 
 On insertion of new content, a background process starts up that summarizes the new content and inserts it into `dynamic/comprehensions/`. The comprehension, according to the CAA, should include reference information to the location in `references/`. The loop agent is presented with a tool that can lookup content in references.
+
+Eventually the dreamer will compact old `dynamic/` files: feed them to a capable LLM to generate comprehensions, move the originals into `references/`, and write the comprehensions back to `dynamic/`. This keeps the working memory within token limits while preserving full history in references.
+
+## The Next Lenny1
+
+I am trying to unify the whole architecture. Suppose we have a new `working-memory/` directory. Here's what happens.. things like the cli-bot or matrix-bot or anything else plop stuff into working-memory. This is done with schema-less files.. if it makes sense the files exist as text, markdown, or json. If there is structure then ideally it is json. The paths must be unique-ish, so a matrix-bot might plop files down like `working-memory/matrix/BOT_USER/{00-preamble.txt,10-ROOM_ID.json}`, etc. Note in this case the 10-room_id.json is unique but 00-preamble.txt is not. You'll see what I mean in a minute... All these files are included in the context in lexicographical order.
+
+Now what happens is every so often the dreamer runs, perhaps it is triggered on a time basis or total number of tokens in `working-memory/` basis (which is more like compaction). And then what happens is we feed *all* of those files into an LLM like Claude or gpt-oss:120b, it needs to be a very good one, and we ask the LLM to generate comprehensions. Then all of the working-memory files are moved into references/ (see this is where uniquness matters, because the preamble in my example overwrites old preambles). The comprehensions are intended to contain citations to the files that have been moved into the references.
+
+Comprehensions get indexed into a vector database. And then we have a tool for the agent that allows retrieval from said database.
+
+Questions:
+
+- Maybe we just reuse dynamic/ for the purpose of working-memory/ and don't have to introduce a new directory.
+- Perhaps things like the preamble go into system/ so the notion then is everything that gets plopped into dynamic should be namespaced and unique. For the matrix example, the preamble would go into system/matrix/BOT_USER_ID/00-preamble.txt and then the chat logs go into system/matrix/BOT_USER_ID/10-ROOM_ID_TIMESTAMP.json. So then assembling the context is actually a full concatenation of system and dynamic using lexicographical sort *relative to system/ and dynamic/*, ie we drop the system and dynamic prefixes before performing the sort.
