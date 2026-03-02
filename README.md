@@ -4,4 +4,4 @@ Lenny is a collection of implementations exploring the [Comprehensible Agent Arc
 
 ## lenny1
 
-Lenny1 examines the use of file over app, keeping source material as files in directories, as well as a directory hierarchy for information that is always inserted into context.
+Lenny1 examines the use of file-over-app, keeping source material as files in directories, as well as a directory hierarchy for information that is always inserted into context. See [`lenny1/`](lenny1/) for details.

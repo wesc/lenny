@@ -23,7 +23,7 @@ use std::time::Duration;
 use url::Url;
 
 use crate::config::Config;
-use crate::{bot, once};
+use crate::{cli_bot, once};
 
 fn sanitize_room_name(name: &str) -> String {
     let s: String = name
@@ -271,7 +271,7 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
                         let room_lines = lines_map.entry(session_id.clone()).or_default();
                         room_lines.push(user_line);
                         room_lines.push(bot_line);
-                        let _ = bot::save_chat_file(&config, &session_id, room_lines);
+                        let _ = cli_bot::save_chat_file(&config, &session_id, room_lines);
                     }
                     Ok(_) => {}
                     Err(e) => eprintln!("Agent error for {room_name}: {e}"),

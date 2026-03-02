@@ -1,4 +1,4 @@
-use lenny1::bot::save_chat_file;
+use lenny1::cli_bot::save_chat_file;
 use lenny1::config::{Config, ProviderConfig};
 use std::fs;
 

@@ -12,6 +12,14 @@ We start with three top level directories, both of which can have an arbitrary n
 
 "Immutable" in this context means that the agent is not allowed to manipulate it, and "mutable" means the agent or one of its background processes can rewrite it at will.
 
+## Commands
+
+- `once <prompt>` — Run a single prompt through the agent and print the answer.
+- `dream` — Watch `system/`, `dynamic/`, and `references/` for changes and run background actions (e.g. sessionize chats).
+- `matrix-bot` — Connect to Matrix via sliding sync and respond to mentions. Logs all room messages/reactions as NDJSON.
+- `cli-bot` — Interactive CLI chat loop. Persists chat history as NDJSON for the dream watcher to sessionize.
+- `eval-basic` — Run basic eval battery against fixture data and print results as JSON.
+
 ## Loop Agent
 
 The processing loop goes like this:

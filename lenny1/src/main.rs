@@ -1,5 +1,5 @@
 mod actions;
-mod bot;
+mod cli_bot;
 mod config;
 mod context;
 mod dream;
@@ -38,13 +38,13 @@ enum Command {
     /// Run basic eval battery against fixture data and print results as JSON
     EvalBasic,
     /// Start the Matrix chat bot
-    BotMatrix {
+    MatrixBot {
         /// Clear sync state and re-sync from scratch (keeps device identity)
         #[arg(long)]
         reset: bool,
     },
-    /// Start the interactive CLI bot (stub)
-    BotCli,
+    /// Start the interactive CLI bot
+    CliBot,
 }
 
 #[tokio::main]
@@ -76,17 +76,17 @@ async fn main() {
                 process::exit(1);
             }
         }
-        Command::BotMatrix { reset } => {
+        Command::MatrixBot { reset } => {
             if let Err(e) = matrix_bot::run(&config, reset).await {
                 eprintln!("Error: {e}");
                 process::exit(1);
             }
         }
-        Command::BotCli => {
+        Command::CliBot => {
             let stdin = io::stdin();
             let mut input = BufReader::new(stdin.lock());
             let mut output = io::stdout();
-            if let Err(e) = bot::chat_loop(&config, &mut input, &mut output).await {
+            if let Err(e) = cli_bot::chat_loop(&config, &mut input, &mut output).await {
                 eprintln!("Error: {e}");
                 process::exit(1);
             }
