@@ -16,7 +16,9 @@ fn approx_tokens(s: &str) -> usize {
 
 /// Collect all NDJSON lines from references/chats/*.json and
 /// references/matrix/**/*.json, filter to last 7 days, keep most
-/// recent up to ~1000 tokens, write to dynamic/00-session.json.
+/// recent up to ~1000 tokens, write to dynamic/10-session.json.
+/// Also copies references/chats/00-preamble.txt to dynamic/00-preamble.txt
+/// if present, so it appears in context before the session data.
 pub fn run(config: &Config) -> Result<bool> {
     let now = chrono::Utc::now().timestamp();
     let cutoff = now - MAX_AGE_SECS;
@@ -72,17 +74,38 @@ pub fn run(config: &Config) -> Result<bool> {
         .join("\n")
         + "\n";
 
-    // Check if content actually changed
-    let dest = config.dynamic_dir.join("00-session.json");
+    fs::create_dir_all(&config.dynamic_dir)?;
+
+    let mut changed = false;
+
+    // Copy preamble from references/chats/00-preamble.txt if present
+    let preamble_src = config.references_dir.join("chats/00-preamble.txt");
+    let preamble_dest = config.dynamic_dir.join("00-preamble.txt");
+    if preamble_src.exists() {
+        let preamble = fs::read_to_string(&preamble_src)?;
+        let existing = fs::read_to_string(&preamble_dest).unwrap_or_default();
+        if preamble != existing {
+            let tmp_name = format!(".tmp-{}", uuid::Uuid::new_v4());
+            let tmp_path = config.dynamic_dir.join(&tmp_name);
+            fs::write(&tmp_path, &preamble)?;
+            fs::rename(&tmp_path, &preamble_dest)?;
+            changed = true;
+        }
+    } else if preamble_dest.exists() {
+        fs::remove_file(&preamble_dest)?;
+        changed = true;
+    }
+
+    // Check if session content actually changed
+    let dest = config.dynamic_dir.join("10-session.json");
     if dest.exists() {
         let existing = fs::read_to_string(&dest)?;
         if existing == output {
-            return Ok(false);
+            return Ok(changed);
         }
     }
 
     // Atomic write into dynamic/
-    fs::create_dir_all(&config.dynamic_dir)?;
     let tmp_name = format!(".tmp-{}", uuid::Uuid::new_v4());
     let tmp_path = config.dynamic_dir.join(&tmp_name);
     fs::write(&tmp_path, &output)?;

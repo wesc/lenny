@@ -250,7 +250,7 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
                             &result.answer
                         );
 
-                        let session_id = format!("matrix-{sanitized_id}");
+                        let session_id = format!("10-matrix-{sanitized_id}");
                         let ts = chrono::Utc::now().timestamp();
                         let user_line = serde_json::to_string(&json!({
                             "id": uuid::Uuid::new_v4().to_string(),

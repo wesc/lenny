@@ -39,7 +39,7 @@ fn write_chat(config: &Config, filename: &str, lines: &[serde_json::Value]) {
 }
 
 fn read_session(config: &Config) -> Vec<serde_json::Value> {
-    let path = config.dynamic_dir.join("00-session.json");
+    let path = config.dynamic_dir.join("10-session.json");
     let content = fs::read_to_string(path).unwrap();
     content
         .lines()
