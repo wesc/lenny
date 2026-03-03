@@ -61,7 +61,7 @@ pub async fn chat_loop<R: BufRead, W: Write>(
 
 /// Atomically write accumulated NDJSON chat lines to `references/chats/{session_id}.json`.
 pub fn save_chat_file(config: &Config, session_id: &str, lines: &[String]) -> Result<()> {
-    let chats_dir = config.references_dir.join("chats");
+    let chats_dir = config.references_dir().join("chats");
     fs::create_dir_all(&chats_dir)?;
 
     let content = lines.join("\n") + "\n";

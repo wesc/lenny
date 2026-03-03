@@ -38,7 +38,7 @@ async fn run_with_client<C: CompletionClient>(
         state: state.clone(),
     };
     let lookup_ref = LookupReferenceTool {
-        references_dir: config.references_dir.clone(),
+        references_dir: config.references_dir(),
     };
 
     let mut builder = client
@@ -125,6 +125,27 @@ pub async fn run_prompt(config: &Config, user_prompt: &str) -> Result<PromptResu
         ProviderConfig::OpenRouter { api_key, model } => {
             let client: openrouter::Client = openrouter::Client::new(api_key)?;
             run_with_client(client, model, config, &preamble, user_prompt, None).await
+        }
+    }
+}
+
+/// Simple completion: no tools, no hooks. For internal use (e.g. compaction).
+pub async fn run_completion(config: &Config, preamble: &str, prompt: &str) -> Result<String> {
+    match &config.provider {
+        ProviderConfig::Ollama { url, model } => {
+            let client: ollama::Client = ollama::Client::builder()
+                .api_key(Nothing)
+                .base_url(url)
+                .build()?;
+            let agent = client.agent(model).preamble(preamble).build();
+            let response = agent.prompt(prompt).await?;
+            Ok(response)
+        }
+        ProviderConfig::OpenRouter { api_key, model } => {
+            let client: openrouter::Client = openrouter::Client::new(api_key)?;
+            let agent = client.agent(model).preamble(preamble).build();
+            let response = agent.prompt(prompt).await?;
+            Ok(response)
         }
     }
 }
@@ -237,7 +258,7 @@ fn slugify_prompt(text: &str) -> String {
 }
 
 fn save_turn(config: &Config, prompt: &str, result: &PromptResult) -> Result<()> {
-    let turns_dir = config.references_dir.join("turns");
+    let turns_dir = config.references_dir().join("turns");
     fs::create_dir_all(&turns_dir)?;
 
     let timestamp = chrono::Utc::now();

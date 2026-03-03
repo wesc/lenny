@@ -56,8 +56,12 @@ pub struct Config {
     pub system_dir: PathBuf,
     #[serde(default = "default_dynamic_dir")]
     pub dynamic_dir: PathBuf,
-    #[serde(default = "default_references_dir")]
-    pub references_dir: PathBuf,
+    #[serde(default = "default_knowledge_dir")]
+    pub knowledge_dir: PathBuf,
+    #[serde(default = "default_max_context_tokens")]
+    pub max_context_tokens: usize,
+    #[serde(default = "default_min_context_tokens")]
+    pub min_context_tokens: usize,
     #[serde(default)]
     pub matrix: Option<MatrixConfig>,
 }
@@ -74,8 +78,14 @@ fn default_system_dir() -> PathBuf {
 fn default_dynamic_dir() -> PathBuf {
     PathBuf::from("data/dynamic")
 }
-fn default_references_dir() -> PathBuf {
-    PathBuf::from("data/references")
+fn default_knowledge_dir() -> PathBuf {
+    PathBuf::from("data/knowledge")
+}
+fn default_max_context_tokens() -> usize {
+    4000
+}
+fn default_min_context_tokens() -> usize {
+    2000
 }
 fn default_ollama_url() -> String {
     "http://localhost:11434".to_string()
@@ -89,13 +99,23 @@ impl Default for Config {
             thinking: false,
             system_dir: default_system_dir(),
             dynamic_dir: default_dynamic_dir(),
-            references_dir: default_references_dir(),
+            knowledge_dir: default_knowledge_dir(),
+            max_context_tokens: default_max_context_tokens(),
+            min_context_tokens: default_min_context_tokens(),
             matrix: None,
         }
     }
 }
 
 impl Config {
+    pub fn references_dir(&self) -> PathBuf {
+        self.knowledge_dir.join("references")
+    }
+
+    pub fn comprehensions_dir(&self) -> PathBuf {
+        self.knowledge_dir.join("comprehensions")
+    }
+
     pub fn load(path: &Path) -> Result<Self> {
         if path.exists() {
             let file = File::open(path)?;

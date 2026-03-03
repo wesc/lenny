@@ -3,9 +3,9 @@ use lenny1::config::{Config, ProviderConfig};
 use std::fs;
 
 fn make_config(tmpdir: &tempfile::TempDir) -> Config {
-    let refs = tmpdir.path().join("references");
+    let knowledge = tmpdir.path().join("knowledge");
     let dynamic = tmpdir.path().join("dynamic");
-    fs::create_dir_all(refs.join("chats")).unwrap();
+    fs::create_dir_all(knowledge.join("references/chats")).unwrap();
     fs::create_dir_all(&dynamic).unwrap();
 
     Config {
@@ -14,7 +14,9 @@ fn make_config(tmpdir: &tempfile::TempDir) -> Config {
         thinking: false,
         system_dir: tmpdir.path().join("system"),
         dynamic_dir: dynamic,
-        references_dir: refs,
+        knowledge_dir: knowledge,
+        max_context_tokens: 4000,
+        min_context_tokens: 2000,
         matrix: None,
     }
 }
@@ -35,7 +37,7 @@ fn write_ndjson(dir: &std::path::Path, filename: &str, lines: &[serde_json::Valu
 }
 
 fn write_chat(config: &Config, filename: &str, lines: &[serde_json::Value]) {
-    write_ndjson(&config.references_dir.join("chats"), filename, lines);
+    write_ndjson(&config.references_dir().join("chats"), filename, lines);
 }
 
 fn read_session(config: &Config) -> Vec<serde_json::Value> {
@@ -213,7 +215,9 @@ fn no_chats_dir_returns_false() {
         thinking: false,
         system_dir: tmpdir.path().join("system"),
         dynamic_dir: dynamic,
-        references_dir: tmpdir.path().join("references"), // no chats/ subdir
+        knowledge_dir: tmpdir.path().join("knowledge"), // no chats/ subdir
+        max_context_tokens: 4000,
+        min_context_tokens: 2000,
         matrix: None,
     };
 
@@ -258,7 +262,7 @@ fn reads_matrix_messages() {
     let now_ms = now * 1000;
 
     // Write to references/matrix/example.org/room.json
-    let matrix_host_dir = config.references_dir.join("matrix").join("example.org");
+    let matrix_host_dir = config.references_dir().join("matrix").join("example.org");
     write_ndjson(
         &matrix_host_dir,
         "room.json",
@@ -271,7 +275,7 @@ fn reads_matrix_messages() {
     );
 
     // Write to references/matrix/other.org/room.json
-    let matrix_host_dir2 = config.references_dir.join("matrix").join("other.org");
+    let matrix_host_dir2 = config.references_dir().join("matrix").join("other.org");
     write_ndjson(
         &matrix_host_dir2,
         "room.json",
@@ -324,7 +328,7 @@ fn skips_hidden_matrix_host_dirs() {
     let now = now_ts();
 
     // Hidden host dir should be skipped
-    let hidden_dir = config.references_dir.join("matrix").join(".hidden-host");
+    let hidden_dir = config.references_dir().join("matrix").join(".hidden-host");
     write_ndjson(
         &hidden_dir,
         "room.json",

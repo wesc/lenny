@@ -1,7 +1,6 @@
 use anyhow::Result;
 use notify_debouncer_full::{DebounceEventResult, new_debouncer, notify::RecursiveMode};
 use std::path::Path;
-use std::sync::mpsc;
 use std::time::Duration;
 
 use crate::actions;
@@ -14,7 +13,7 @@ fn is_hidden_path(path: &Path) -> bool {
         .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
 }
 
-pub fn run(config: &Config) -> Result<()> {
+pub async fn run(config: &Config) -> Result<()> {
     // Run all actions once at startup
     eprintln!("Running initial actions...");
     let n = actions::run_all(config)?;
@@ -22,20 +21,25 @@ pub fn run(config: &Config) -> Result<()> {
         eprintln!("{n} action(s) produced changes");
     }
 
-    let (tx, rx) = mpsc::channel();
+    // Run compaction at startup
+    if actions::compact::run(config).await? {
+        eprintln!("Initial compaction completed");
+    }
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DebounceEventResult>(100);
 
     let mut debouncer = new_debouncer(
         Duration::from_secs(DEBOUNCE_SECS),
         None,
         move |result: DebounceEventResult| {
-            let _ = tx.send(result);
+            let _ = tx.blocking_send(result);
         },
     )?;
 
     for dir in [
         &config.system_dir,
         &config.dynamic_dir,
-        &config.references_dir,
+        &config.knowledge_dir,
     ] {
         if dir.exists() {
             debouncer.watch(dir, RecursiveMode::Recursive)?;
@@ -47,17 +51,19 @@ pub fn run(config: &Config) -> Result<()> {
 
     eprintln!("Dream mode active. Watching for changes...");
 
-    for result in rx {
+    while let Some(result) = rx.recv().await {
         match result {
             Ok(events) => {
-                let dominated_events = events
-                    .into_iter()
-                    .filter(|e| e.event.paths.iter().any(|p| !is_hidden_path(p)));
-                let has_relevant = dominated_events.count() > 0;
+                let has_relevant = events
+                    .iter()
+                    .any(|e| e.event.paths.iter().any(|p| !is_hidden_path(p)));
                 if has_relevant {
                     eprintln!("Changes detected, running actions...");
                     if let Err(e) = actions::run_all(config) {
                         eprintln!("Action error: {e}");
+                    }
+                    if let Err(e) = actions::compact::run(config).await {
+                        eprintln!("Compact error: {e}");
                     }
                 }
             }

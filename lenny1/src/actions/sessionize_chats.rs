@@ -27,13 +27,13 @@ pub fn run(config: &Config) -> Result<bool> {
     let mut seen_ids: HashSet<String> = HashSet::new();
 
     // Read from references/chats/*.json
-    let chats_dir = config.references_dir.join("chats");
+    let chats_dir = config.references_dir().join("chats");
     if chats_dir.exists() {
         collect_ndjson_lines(&chats_dir, false, cutoff, &mut seen_ids, &mut utterances)?;
     }
 
     // Read from references/matrix/**/*.json (host subdirectories)
-    let matrix_dir = config.references_dir.join("matrix");
+    let matrix_dir = config.references_dir().join("matrix");
     if matrix_dir.exists() {
         for host_entry in fs::read_dir(&matrix_dir)? {
             let host_entry = host_entry?;
@@ -79,7 +79,7 @@ pub fn run(config: &Config) -> Result<bool> {
     let mut changed = false;
 
     // Copy preamble from references/chats/00-preamble.txt if present
-    let preamble_src = config.references_dir.join("chats/00-preamble.txt");
+    let preamble_src = config.references_dir().join("chats/00-preamble.txt");
     let preamble_dest = config.dynamic_dir.join("00-preamble.txt");
     if preamble_src.exists() {
         let preamble = fs::read_to_string(&preamble_src)?;

@@ -13,7 +13,7 @@ thinking: false
 
 system_dir: "data/system"
 dynamic_dir: "data/dynamic"
-references_dir: "data/references"
+knowledge_dir: "data/knowledge"
 
 # matrix:
 #   homeserver: "https://api.filament.dm"

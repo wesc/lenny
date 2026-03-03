@@ -3,7 +3,7 @@ use std::fs;
 use std::path::Path;
 
 /// Recursively collect all non-hidden file paths under `dir`.
-fn collect_files(dir: &Path) -> Result<Vec<std::path::PathBuf>> {
+pub(crate) fn collect_files(dir: &Path) -> Result<Vec<std::path::PathBuf>> {
     let mut files = Vec::new();
     if !dir.exists() {
         return Ok(files);
@@ -35,24 +35,20 @@ fn collect_files_recursive(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> R
 
 /// Assemble context from system and dynamic directories.
 /// Returns a single string with section markers for each file.
-/// System files come first, then dynamic files, each sorted by relative path.
+/// Order: system → dynamic, each sorted by relative path.
+/// Knowledge (comprehensions + references) is accessed via RAG, not assembled here.
 pub fn assemble_context(system_dir: &Path, dynamic_dir: &Path) -> Result<String> {
     let mut system_files = collect_files(system_dir)?;
     let mut dynamic_files = collect_files(dynamic_dir)?;
     system_files.sort();
     dynamic_files.sort();
 
-    let all_files: Vec<(&str, &Path, &std::path::PathBuf)> = system_files
-        .iter()
-        .map(|f| ("system", system_dir, f))
-        .chain(dynamic_files.iter().map(|f| ("dynamic", dynamic_dir, f)))
-        .collect();
-
     let mut context = String::new();
-    for (label, base_dir, path) in &all_files {
+
+    for path in &system_files {
         let display = path
-            .strip_prefix(base_dir)
-            .map(|p| format!("{}/{}", label, p.display()))
+            .strip_prefix(system_dir)
+            .map(|p| format!("system/{}", p.display()))
             .unwrap_or_else(|_| path.display().to_string());
 
         let content = fs::read_to_string(path)?;
@@ -62,6 +58,28 @@ pub fn assemble_context(system_dir: &Path, dynamic_dir: &Path) -> Result<String>
             context.push('\n');
         }
         context.push('\n');
+    }
+
+    if !dynamic_files.is_empty() {
+        context.push_str(
+            "The following is your current working knowledge — recent conversations, \
+             session data, and observations. Use this to inform your responses.\n\n",
+        );
+
+        for path in &dynamic_files {
+            let display = path
+                .strip_prefix(dynamic_dir)
+                .map(|p| format!("dynamic/{}", p.display()))
+                .unwrap_or_else(|_| path.display().to_string());
+
+            let content = fs::read_to_string(path)?;
+            context.push_str(&format!("--- {display} ---\n"));
+            context.push_str(&content);
+            if !content.ends_with('\n') {
+                context.push('\n');
+            }
+            context.push('\n');
+        }
     }
 
     Ok(context)

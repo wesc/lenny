@@ -162,7 +162,9 @@ fn eval_config(base_config: &Config) -> Result<(Config, tempfile::TempDir)> {
         thinking: base_config.thinking,
         system_dir: fixtures.join("system"),
         dynamic_dir: fixtures.join("dynamic"),
-        references_dir: tmpdir.path().to_path_buf(),
+        knowledge_dir: tmpdir.path().to_path_buf(),
+        max_context_tokens: base_config.max_context_tokens,
+        min_context_tokens: base_config.min_context_tokens,
         matrix: None,
     };
     Ok((config, tmpdir))

@@ -65,7 +65,7 @@ async fn main() {
             }
         }
         Command::Dream => {
-            if let Err(e) = dream::run(&config) {
+            if let Err(e) = dream::run(&config).await {
                 eprintln!("Error: {e}");
                 process::exit(1);
             }

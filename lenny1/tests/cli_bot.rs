@@ -9,7 +9,9 @@ fn make_config(tmpdir: &tempfile::TempDir) -> Config {
         thinking: false,
         system_dir: tmpdir.path().join("system"),
         dynamic_dir: tmpdir.path().join("dynamic"),
-        references_dir: tmpdir.path().join("references"),
+        knowledge_dir: tmpdir.path().join("knowledge"),
+        max_context_tokens: 4000,
+        min_context_tokens: 2000,
         matrix: None,
     }
 }
@@ -35,7 +37,7 @@ fn writes_valid_ndjson() {
 
     save_chat_file(&config, "cli-test", &lines).unwrap();
 
-    let path = config.references_dir.join("chats/cli-test.json");
+    let path = config.references_dir().join("chats/cli-test.json");
     let content = fs::read_to_string(&path).unwrap();
     let parsed: Vec<serde_json::Value> = content
         .lines()
@@ -63,7 +65,7 @@ fn accumulates_lines() {
     ];
     save_chat_file(&config, "cli-accum", &lines).unwrap();
 
-    let path = config.references_dir.join("chats/cli-accum.json");
+    let path = config.references_dir().join("chats/cli-accum.json");
     let content = fs::read_to_string(&path).unwrap();
     let count = content.lines().filter(|l| !l.trim().is_empty()).count();
     assert_eq!(count, 2);
@@ -84,12 +86,17 @@ fn creates_chats_dir() {
     let config = make_config(&tmpdir);
 
     // references/chats/ does not exist yet
-    assert!(!config.references_dir.join("chats").exists());
+    assert!(!config.references_dir().join("chats").exists());
 
     let lines = vec![chat_line(1740000000, "user", "hi")];
     save_chat_file(&config, "cli-mkdir", &lines).unwrap();
 
-    assert!(config.references_dir.join("chats/cli-mkdir.json").exists());
+    assert!(
+        config
+            .references_dir()
+            .join("chats/cli-mkdir.json")
+            .exists()
+    );
 }
 
 #[test]
@@ -103,7 +110,7 @@ fn atomic_write_no_temp_files_left() {
     ];
     save_chat_file(&config, "cli-atomic", &lines).unwrap();
 
-    let chats_dir = config.references_dir.join("chats");
+    let chats_dir = config.references_dir().join("chats");
     let entries: Vec<_> = fs::read_dir(&chats_dir)
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
