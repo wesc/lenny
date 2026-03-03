@@ -34,6 +34,7 @@ impl Tool for RandomLetterTool {
     async fn call(&self, _args: Self::Args) -> Result<Self::Output, Self::Error> {
         use rand::Rng;
         let c = rand::rng().random_range(b'a'..=b'z') as char;
+        tracing::debug!(letter = %c, "generated random letter");
         Ok(c.to_string())
     }
 }

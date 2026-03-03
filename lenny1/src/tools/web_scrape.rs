@@ -62,6 +62,8 @@ impl Tool for WebScrapeTool {
             .build()
             .map_err(|e| WebScrapeError::Request(e.to_string()))?;
 
+        tracing::debug!(url, "fetching web page");
+
         let response = client
             .get(url)
             .send()
@@ -69,6 +71,7 @@ impl Tool for WebScrapeTool {
             .map_err(|e| WebScrapeError::Request(e.to_string()))?;
 
         let status = response.status();
+        tracing::debug!(status = status.as_u16(), url, "received response");
         if !status.is_success() {
             return Err(WebScrapeError::Status(status.as_u16()));
         }
@@ -77,6 +80,8 @@ impl Tool for WebScrapeTool {
             .text()
             .await
             .map_err(|e| WebScrapeError::Request(e.to_string()))?;
+
+        tracing::debug!(body_len = body.len(), url, "fetched body");
 
         let markdown = html_to_markdown_rs::convert(&body, None)
             .map_err(|e| WebScrapeError::Conversion(e.to_string()))?;

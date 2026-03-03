@@ -65,6 +65,7 @@ impl Tool for LookupReferenceTool {
             return Err(LookupReferenceError::PathTraversal(args.path));
         }
 
+        tracing::debug!(path = %full_path.display(), "looking up reference");
         let content = std::fs::read_to_string(&full_path)?;
         Ok(content)
     }

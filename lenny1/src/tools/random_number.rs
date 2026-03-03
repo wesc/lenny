@@ -44,6 +44,12 @@ impl Tool for RandomNumberTool {
             return Err(RandomNumberError("min must be <= max".to_string()));
         }
         let n = rand::rng().random_range(args.min..=args.max);
+        tracing::debug!(
+            min = args.min,
+            max = args.max,
+            result = n,
+            "generated random number"
+        );
         Ok(n)
     }
 }

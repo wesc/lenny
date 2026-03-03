@@ -49,6 +49,10 @@ enum Command {
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
     let cli = Cli::parse();
 
     let config = config::Config::load(Path::new(&cli.config)).unwrap_or_else(|e| {

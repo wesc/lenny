@@ -81,6 +81,7 @@ impl<M: CompletionModel> PromptHook<M> for AgentHook {
     ) -> rig::agent::ToolCallHookAction {
         let args_value =
             serde_json::from_str(args).unwrap_or(serde_json::Value::String(args.to_string()));
+        tracing::debug!(tool = tool_name, args, "tool call");
         if let Ok(mut state) = self.state.lock() {
             state.events.push(AgentEvent::ToolCall {
                 tool: tool_name.to_string(),
@@ -99,6 +100,8 @@ impl<M: CompletionModel> PromptHook<M> for AgentHook {
         _args: &str,
         result: &str,
     ) -> HookAction {
+        let truncated = &result[..result.len().min(200)];
+        tracing::debug!(tool = tool_name, result = truncated, "tool result");
         if let Ok(mut state) = self.state.lock() {
             state.events.push(AgentEvent::ToolResult {
                 tool: tool_name.to_string(),
