@@ -1,13 +1,9 @@
-mod final_answer;
 mod lookup_reference;
-mod no_response;
 mod random_letter;
 mod random_number;
 mod web_scrape;
 
-pub use final_answer::FinalAnswerTool;
 pub use lookup_reference::LookupReferenceTool;
-pub use no_response::NoResponseTool;
 pub use random_letter::RandomLetterTool;
 pub use random_number::RandomNumberTool;
 pub use web_scrape::WebScrapeTool;
@@ -16,6 +12,22 @@ use rig::agent::{HookAction, PromptHook};
 use rig::completion::CompletionModel;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+
+// ---- Structured output ----
+
+/// The agent's structured response, enforced via output schema.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct AgentOutput {
+    /// Set to true when the conversation does not need a response from you.
+    #[serde(default)]
+    pub no_response: bool,
+    /// Your complete final answer to the user's question.
+    #[serde(default)]
+    pub answer: String,
+    /// A short slug (2-4 words, lowercase, hyphens) summarizing the topic.
+    #[serde(default)]
+    pub slug: String,
+}
 
 // ---- Shared agent state ----
 
@@ -37,34 +49,22 @@ pub enum AgentEvent {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FinalAnswerData {
-    pub answer: String,
-    pub slug: String,
-}
-
-/// Shared mutable state passed to the hook and tools.
+/// Shared mutable state passed to the hook.
 pub struct AgentState {
-    pub final_answer: Option<FinalAnswerData>,
-    pub no_response: Option<String>,
     pub events: Vec<AgentEvent>,
 }
 
 impl AgentState {
     pub fn new() -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(Self {
-            final_answer: None,
-            no_response: None,
-            events: Vec::new(),
-        }))
+        Arc::new(Mutex::new(Self { events: Vec::new() }))
     }
 }
 
-pub(crate) fn now() -> String {
+fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 
-// ---- AgentHook: captures events + terminates on final_answer ----
+// ---- AgentHook: captures tool events ----
 
 #[derive(Clone)]
 pub struct AgentHook {
@@ -106,12 +106,6 @@ impl<M: CompletionModel> PromptHook<M> for AgentHook {
                 timestamp: now(),
             });
         }
-        if tool_name == "final_answer" {
-            HookAction::terminate("final_answer called")
-        } else if tool_name == "no_response" {
-            HookAction::terminate("no_response called")
-        } else {
-            HookAction::cont()
-        }
+        HookAction::cont()
     }
 }

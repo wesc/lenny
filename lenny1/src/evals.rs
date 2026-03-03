@@ -5,56 +5,59 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use crate::config::Config;
-use crate::once;
+use crate::once::{self, PromptResult};
 use crate::tools::AgentEvent;
 
 struct Eval {
     name: &'static str,
     prompt: &'static str,
-    check: fn(&str, &[AgentEvent]) -> (bool, String),
+    check: fn(&PromptResult) -> (bool, String),
 }
 
-fn check_arithmetic(answer: &str, _events: &[AgentEvent]) -> (bool, String) {
-    let pass = answer.contains('4');
+fn check_arithmetic(r: &PromptResult) -> (bool, String) {
+    let pass = r.answer.contains('4');
     let reason = if pass {
         "answer contains '4'".to_string()
     } else {
-        format!("expected '4' in answer, got: {answer}")
+        format!("expected '4' in answer, got: {}", r.answer)
     };
     (pass, reason)
 }
 
-fn check_favorite_color(answer: &str, _events: &[AgentEvent]) -> (bool, String) {
-    let pass = answer.to_lowercase().contains("chartreuse");
+fn check_favorite_color(r: &PromptResult) -> (bool, String) {
+    let pass = r.answer.to_lowercase().contains("chartreuse");
     let reason = if pass {
         "answer contains 'chartreuse'".to_string()
     } else {
-        format!("expected 'chartreuse' in answer, got: {answer}")
+        format!("expected 'chartreuse' in answer, got: {}", r.answer)
     };
     (pass, reason)
 }
 
-fn check_favorite_car(answer: &str, _events: &[AgentEvent]) -> (bool, String) {
-    let lower = answer.to_lowercase();
+fn check_favorite_car(r: &PromptResult) -> (bool, String) {
+    let lower = r.answer.to_lowercase();
     let pass = lower.contains("toyota") && lower.contains("pineapple");
     let reason = if pass {
         "answer contains 'Toyota Pineapple'".to_string()
     } else {
-        format!("expected 'Toyota Pineapple' in answer, got: {answer}")
+        format!("expected 'Toyota Pineapple' in answer, got: {}", r.answer)
     };
     (pass, reason)
 }
 
-fn check_random_number(answer: &str, events: &[AgentEvent]) -> (bool, String) {
-    let used_tool = events
+fn has_tool_call(events: &[AgentEvent], name: &str) -> bool {
+    events
         .iter()
-        .any(|e| matches!(e, AgentEvent::ToolCall { tool, .. } if tool == "random_number"));
-    if !used_tool {
+        .any(|e| matches!(e, AgentEvent::ToolCall { tool, .. } if tool == name))
+}
+
+fn check_random_number(r: &PromptResult) -> (bool, String) {
+    if !has_tool_call(&r.events, "random_number") {
         return (false, "did not call random_number tool".to_string());
     }
-    let has_digit = answer.chars().any(|c| c.is_ascii_digit());
+    let has_digit = r.answer.chars().any(|c| c.is_ascii_digit());
     if !has_digit {
-        return (false, format!("answer has no digit: {answer}"));
+        return (false, format!("answer has no digit: {}", r.answer));
     }
     (
         true,
@@ -62,16 +65,16 @@ fn check_random_number(answer: &str, events: &[AgentEvent]) -> (bool, String) {
     )
 }
 
-fn check_random_letter(answer: &str, events: &[AgentEvent]) -> (bool, String) {
-    let used_tool = events
-        .iter()
-        .any(|e| matches!(e, AgentEvent::ToolCall { tool, .. } if tool == "random_letter"));
-    if !used_tool {
+fn check_random_letter(r: &PromptResult) -> (bool, String) {
+    if !has_tool_call(&r.events, "random_letter") {
         return (false, "did not call random_letter tool".to_string());
     }
     let re = Regex::new(r"[a-z]").unwrap();
-    if !re.is_match(answer) {
-        return (false, format!("answer has no lowercase letter: {answer}"));
+    if !re.is_match(&r.answer) {
+        return (
+            false,
+            format!("answer has no lowercase letter: {}", r.answer),
+        );
     }
     (
         true,
@@ -79,36 +82,29 @@ fn check_random_letter(answer: &str, events: &[AgentEvent]) -> (bool, String) {
     )
 }
 
-fn check_no_response(_answer: &str, events: &[AgentEvent]) -> (bool, String) {
-    let used_tool = events
-        .iter()
-        .any(|e| matches!(e, AgentEvent::ToolCall { tool, .. } if tool == "no_response"));
-    if !used_tool {
-        return (false, "did not call no_response tool".to_string());
+fn check_no_response(r: &PromptResult) -> (bool, String) {
+    if !r.skipped {
+        return (false, "no_response was not set".to_string());
     }
-    (true, "called no_response tool".to_string())
+    (true, "no_response was set".to_string())
 }
 
-fn check_multi_tool(answer: &str, events: &[AgentEvent]) -> (bool, String) {
-    let used_number = events
-        .iter()
-        .any(|e| matches!(e, AgentEvent::ToolCall { tool, .. } if tool == "random_number"));
-    let used_letter = events
-        .iter()
-        .any(|e| matches!(e, AgentEvent::ToolCall { tool, .. } if tool == "random_letter"));
+fn check_multi_tool(r: &PromptResult) -> (bool, String) {
+    let used_number = has_tool_call(&r.events, "random_number");
+    let used_letter = has_tool_call(&r.events, "random_letter");
     if !used_number || !used_letter {
         return (
             false,
             format!("expected both tools called (number={used_number}, letter={used_letter})"),
         );
     }
-    let has_digit = answer.chars().any(|c| c.is_ascii_digit());
-    let has_letter = answer.chars().any(|c| c.is_ascii_lowercase());
+    let has_digit = r.answer.chars().any(|c| c.is_ascii_digit());
+    let has_letter = r.answer.chars().any(|c| c.is_ascii_lowercase());
     let pass = has_digit && has_letter;
     let reason = if pass {
         "called both tools, answer has digit + letter".to_string()
     } else {
-        format!("answer missing digit or letter: {answer}")
+        format!("answer missing digit or letter: {}", r.answer)
     };
     (pass, reason)
 }
@@ -185,7 +181,7 @@ pub async fn run(base_config: &Config) -> Result<()> {
         let outcome = match once::run_prompt(&config, eval.prompt).await {
             Ok(result) => {
                 let elapsed = eval_start.elapsed().as_secs_f64();
-                let (pass, reason) = (eval.check)(&result.answer, &result.events);
+                let (pass, reason) = (eval.check)(&result);
                 if pass {
                     passed += 1;
                 }

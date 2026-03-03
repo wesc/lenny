@@ -1,6 +1,6 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 use rig::client::{CompletionClient, Nothing};
-use rig::completion::{Prompt, PromptError};
+use rig::completion::{Prompt, TypedPrompt};
 use rig::providers::{ollama, openrouter};
 use serde_json::json;
 use std::fs;
@@ -8,8 +8,8 @@ use std::fs;
 use crate::config::{Config, ProviderConfig};
 use crate::context;
 use crate::tools::{
-    AgentEvent, AgentHook, AgentState, FinalAnswerData, FinalAnswerTool, LookupReferenceTool,
-    NoResponseTool, RandomLetterTool, RandomNumberTool, WebScrapeTool,
+    AgentEvent, AgentHook, AgentOutput, AgentState, LookupReferenceTool, RandomLetterTool,
+    RandomNumberTool, WebScrapeTool,
 };
 
 /// Result of running a single prompt through the agent.
@@ -19,6 +19,14 @@ pub struct PromptResult {
     pub skipped: bool,
     pub events: Vec<AgentEvent>,
 }
+
+const OUTPUT_INSTRUCTIONS: &str = "\
+After using any tools you need, you MUST respond with a JSON object matching this schema:
+{\"no_response\": bool, \"answer\": string, \"slug\": string}
+
+- If the message is not directed at you or needs no reply, respond: {\"no_response\": true, \"answer\": \"\", \"slug\": \"\"}
+- Otherwise, set no_response to false, answer with your full response, and slug with a short 2-4 word lowercase hyphenated topic summary.
+- Your ENTIRE response must be valid JSON. No text before or after the JSON object.";
 
 /// Build agent from any CompletionClient, run prompt, return structured result.
 async fn run_with_client<C: CompletionClient>(
@@ -31,21 +39,15 @@ async fn run_with_client<C: CompletionClient>(
 ) -> Result<PromptResult> {
     let state = AgentState::new();
 
-    let final_answer = FinalAnswerTool {
-        state: state.clone(),
-    };
-    let no_response = NoResponseTool {
-        state: state.clone(),
-    };
     let lookup_ref = LookupReferenceTool {
         references_dir: config.references_dir(),
     };
 
+    let full_preamble = format!("{preamble}\n\n{OUTPUT_INSTRUCTIONS}");
+
     let mut builder = client
         .agent(model)
-        .preamble(preamble)
-        .tool(final_answer)
-        .tool(no_response)
+        .preamble(&full_preamble)
         .tool(lookup_ref)
         .tool(RandomNumberTool)
         .tool(RandomLetterTool)
@@ -61,52 +63,24 @@ async fn run_with_client<C: CompletionClient>(
     let hook = AgentHook {
         state: state.clone(),
     };
-    let result = agent.prompt(user_prompt).with_hook(hook).await;
+    let output: AgentOutput = agent.prompt_typed(user_prompt).with_hook(hook).await?;
 
-    match result {
-        Err(PromptError::PromptCancelled { .. }) => {
-            let mut st = state.lock().unwrap();
-            if let Some(reason) = st.no_response.take() {
-                let events = std::mem::take(&mut st.events);
-                Ok(PromptResult {
-                    answer: reason,
-                    slug: "no-response".to_string(),
-                    skipped: true,
-                    events,
-                })
-            } else if let Some(mut data) = st.final_answer.take() {
-                data.slug = sanitize_slug(&data.slug);
-                let events = std::mem::take(&mut st.events);
-                Ok(PromptResult {
-                    answer: data.answer,
-                    slug: data.slug,
-                    skipped: false,
-                    events,
-                })
-            } else {
-                bail!("hook fired but no data captured");
-            }
-        }
-        Ok(text) => {
-            let mut st = state.lock().unwrap();
-            let data = st.final_answer.take().unwrap_or_else(|| {
-                let (answer, slug) = extract_answer_from_text(&text);
-                FinalAnswerData { answer, slug }
-            });
-            let events = std::mem::take(&mut st.events);
-            Ok(PromptResult {
-                answer: data.answer,
-                slug: data.slug,
-                skipped: false,
-                events,
-            })
-        }
-        Err(PromptError::MaxTurnsError { max_turns, .. }) => {
-            bail!("reached max turns limit ({max_turns})");
-        }
-        Err(e) => {
-            bail!("{e}");
-        }
+    let events = std::mem::take(&mut state.lock().unwrap().events);
+
+    if output.no_response {
+        Ok(PromptResult {
+            answer: output.answer,
+            slug: "no-response".to_string(),
+            skipped: true,
+            events,
+        })
+    } else {
+        Ok(PromptResult {
+            answer: output.answer,
+            slug: sanitize_slug(&output.slug),
+            skipped: false,
+            events,
+        })
     }
 }
 
@@ -167,70 +141,6 @@ pub async fn run(config: &Config, user_prompt: &str) -> Result<()> {
     Ok(())
 }
 
-/// Parse the LLM's raw text when it tried to "call" final_answer inline rather
-/// than via a proper tool call. Strips the final_answer block and extracts slug.
-fn extract_answer_from_text(text: &str) -> (String, String) {
-    let lines: Vec<&str> = text.lines().collect();
-
-    // Find where the LLM started emitting "final_answer" as plain text
-    let fa_index = lines
-        .iter()
-        .position(|l| l.trim().eq_ignore_ascii_case("final_answer"));
-
-    if let Some(idx) = fa_index {
-        let answer = lines[..idx].join("\n").trim().to_string();
-
-        // Look for a slug line in the tail after "final_answer"
-        let tail = &lines[idx..];
-        let slug = tail
-            .iter()
-            .rev()
-            .find_map(|l| {
-                let t = l.trim();
-                if let Some(s) = t.strip_prefix("slug:") {
-                    let s = sanitize_slug(s.trim());
-                    if !s.is_empty() {
-                        return Some(s);
-                    }
-                }
-                if t.contains('-') && !t.contains(' ') && t.len() < 60 {
-                    let s = sanitize_slug(t);
-                    if !s.is_empty() {
-                        return Some(s);
-                    }
-                }
-                None
-            })
-            .unwrap_or_else(|| slugify_prompt(&answer));
-
-        let answer = if answer.is_empty() {
-            text.trim().to_string()
-        } else {
-            answer
-        };
-        return (answer, slug);
-    }
-
-    // No "final_answer" block — look for a trailing "slug:" line
-    for i in (0..lines.len()).rev() {
-        let trimmed = lines[i].trim();
-        if let Some(slug) = trimmed.strip_prefix("slug:") {
-            let slug = sanitize_slug(slug.trim());
-            if !slug.is_empty() {
-                let answer = lines[..i].join("\n").trim().to_string();
-                let answer = if answer.is_empty() {
-                    text.trim().to_string()
-                } else {
-                    answer
-                };
-                return (answer, slug);
-            }
-        }
-    }
-
-    (text.trim().to_string(), slugify_prompt(text))
-}
-
 pub fn sanitize_slug(s: &str) -> String {
     s.to_lowercase()
         .split_whitespace()
@@ -239,23 +149,6 @@ pub fn sanitize_slug(s: &str) -> String {
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
         .collect()
-}
-
-fn slugify_prompt(text: &str) -> String {
-    let slug: String = text
-        .split_whitespace()
-        .take(4)
-        .collect::<Vec<_>>()
-        .join("-")
-        .to_lowercase()
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
-        .collect();
-    if slug.is_empty() {
-        "response".to_string()
-    } else {
-        slug
-    }
 }
 
 fn save_turn(config: &Config, prompt: &str, result: &PromptResult) -> Result<()> {
