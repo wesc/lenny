@@ -9,7 +9,7 @@ use crate::config::{Config, ProviderConfig};
 use crate::context;
 use crate::tools::{
     AgentEvent, AgentHook, AgentState, FinalAnswerData, FinalAnswerTool, LookupReferenceTool,
-    NoResponseTool, RandomLetterTool, RandomNumberTool,
+    NoResponseTool, RandomLetterTool, RandomNumberTool, WebScrapeTool,
 };
 
 /// Result of running a single prompt through the agent.
@@ -49,6 +49,7 @@ async fn run_with_client<C: CompletionClient>(
         .tool(lookup_ref)
         .tool(RandomNumberTool)
         .tool(RandomLetterTool)
+        .tool(WebScrapeTool)
         .default_max_turns(config.max_iterations);
 
     if let Some(params) = additional_params {

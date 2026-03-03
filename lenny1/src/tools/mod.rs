@@ -3,12 +3,14 @@ mod lookup_reference;
 mod no_response;
 mod random_letter;
 mod random_number;
+mod web_scrape;
 
 pub use final_answer::FinalAnswerTool;
 pub use lookup_reference::LookupReferenceTool;
 pub use no_response::NoResponseTool;
 pub use random_letter::RandomLetterTool;
 pub use random_number::RandomNumberTool;
+pub use web_scrape::WebScrapeTool;
 
 use rig::agent::{HookAction, PromptHook};
 use rig::completion::CompletionModel;

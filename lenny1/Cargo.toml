@@ -22,3 +22,4 @@ matrix-sdk = { version = "0.16", features = ["sqlite"] }
 reqwest = "0.12"
 futures-util = "0.3"
 url = "2"
+html-to-markdown-rs = "2"
