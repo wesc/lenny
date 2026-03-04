@@ -66,7 +66,7 @@ fn ensure_vec_extension() {
                 *const rusqlite::ffi::sqlite3_api_routines,
             ) -> i32,
         >(
-            sqlite_vec::sqlite3_vec_init as *const (),
+            sqlite_vec::sqlite3_vec_init as *const ()
         )));
     });
 }

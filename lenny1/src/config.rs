@@ -17,16 +17,16 @@ pub enum ProviderConfig {
     OpenRouter { api_key: String, model: String },
 }
 
-impl Default for ProviderConfig {
-    fn default() -> Self {
+impl ProviderConfig {
+    /// Dummy provider for tests that don't call the LLM.
+    #[allow(dead_code)]
+    pub fn test_default() -> Self {
         ProviderConfig::Ollama {
             url: default_ollama_url(),
             model: default_model(),
         }
     }
-}
 
-impl ProviderConfig {
     #[allow(dead_code)]
     pub fn model(&self) -> &str {
         match self {
@@ -46,7 +46,6 @@ pub struct MatrixConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-    #[serde(default)]
     pub provider: ProviderConfig,
     #[serde(default = "default_max_iterations")]
     pub max_iterations: usize,
@@ -101,24 +100,6 @@ fn default_ollama_url() -> String {
     "http://localhost:11434".to_string()
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            provider: ProviderConfig::default(),
-            max_iterations: default_max_iterations(),
-            thinking: false,
-            system_dir: default_system_dir(),
-            dynamic_dir: default_dynamic_dir(),
-            knowledge_dir: default_knowledge_dir(),
-            max_context_tokens: default_max_context_tokens(),
-            min_context_tokens: default_min_context_tokens(),
-            matrix: None,
-            min_score_range: default_min_score_range(),
-            score_gap_threshold: default_score_gap_threshold(),
-        }
-    }
-}
-
 impl Config {
     pub fn references_dir(&self) -> PathBuf {
         self.knowledge_dir.join("references")
@@ -129,12 +110,8 @@ impl Config {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        if path.exists() {
-            let file = File::open(path)?;
-            let config: Config = serde_yaml::from_reader(file)?;
-            Ok(config)
-        } else {
-            Ok(Config::default())
-        }
+        let file = File::open(path)?;
+        let config: Config = serde_yaml::from_reader(file)?;
+        Ok(config)
     }
 }

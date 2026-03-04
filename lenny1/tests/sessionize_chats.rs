@@ -9,7 +9,7 @@ fn make_config(tmpdir: &tempfile::TempDir) -> Config {
     fs::create_dir_all(&dynamic).unwrap();
 
     Config {
-        provider: ProviderConfig::default(),
+        provider: ProviderConfig::test_default(),
         max_iterations: 1,
         thinking: false,
         system_dir: tmpdir.path().join("system"),
@@ -212,7 +212,7 @@ fn no_chats_dir_returns_false() {
     fs::create_dir_all(&dynamic).unwrap();
 
     let config = Config {
-        provider: ProviderConfig::default(),
+        provider: ProviderConfig::test_default(),
         max_iterations: 1,
         thinking: false,
         system_dir: tmpdir.path().join("system"),

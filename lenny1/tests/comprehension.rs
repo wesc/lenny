@@ -6,7 +6,7 @@ use std::fs;
 
 fn make_config(tmpdir: &tempfile::TempDir) -> Config {
     Config {
-        provider: ProviderConfig::default(),
+        provider: ProviderConfig::test_default(),
         max_iterations: 1,
         thinking: false,
         system_dir: tmpdir.path().join("system"),
