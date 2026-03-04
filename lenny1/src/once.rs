@@ -23,11 +23,20 @@ pub struct PromptResult {
 }
 
 const OUTPUT_INSTRUCTIONS: &str = "\
-After using any tools you need, you MUST respond with a JSON object matching this schema:
+IMPORTANT — Knowledge base procedure:
+BEFORE answering, you MUST call context_search with a query derived from the user's message. \
+This applies to virtually every question — about yourself, your preferences, past events, facts, \
+people, decisions, or anything that might have been discussed before. \
+The only exceptions are purely procedural messages (e.g. \"hello\", \"thanks\") that clearly \
+need no factual lookup. When in doubt, search. You may call context_search multiple times \
+with different queries if the topic is broad.
+
+After searching and using any other tools you need, respond with a JSON object:
 {\"no_response\": bool, \"answer\": string, \"slug\": string}
 
-- If the message is not directed at you or needs no reply, respond: {\"no_response\": true, \"answer\": \"\", \"slug\": \"\"}
-- Otherwise, set no_response to false, answer with your full response, and slug with a short 2-4 word lowercase hyphenated topic summary.
+- If the message is not directed at you or needs no reply: {\"no_response\": true, \"answer\": \"\", \"slug\": \"\"}
+- Otherwise: set no_response to false, answer using what you found in the knowledge base \
+combined with your own knowledge, and set slug to a short 2-4 word lowercase hyphenated topic summary.
 - Your ENTIRE response must be valid JSON. No text before or after the JSON object.";
 
 /// Build agent from any CompletionClient, run prompt, return structured result.
@@ -141,11 +150,18 @@ pub async fn run_completion_typed<T: DeserializeOwned + JsonSchema + Send>(
 pub async fn run(config: &Config, user_prompt: &str) -> Result<()> {
     let result = run_prompt(config, user_prompt).await?;
 
+    let tool_calls: Vec<&AgentEvent> = result
+        .events
+        .iter()
+        .filter(|e| matches!(e, AgentEvent::ToolCall { .. }))
+        .collect();
+
     let output = json!({
         "prompt": user_prompt,
         "answer": result.answer,
         "slug": result.slug,
         "skipped": result.skipped,
+        "tool_calls": tool_calls,
     });
     println!("{}", serde_json::to_string_pretty(&output)?);
 

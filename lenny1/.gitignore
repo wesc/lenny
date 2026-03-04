@@ -24,3 +24,4 @@ target
 config.yaml
 data/
 data.bak/
+.fastembed_cache/

@@ -1,18 +1,12 @@
 use anyhow::Result;
-use arrow_array::{Int64Array, RecordBatch, RecordBatchIterator, StringArray};
-use arrow_schema::{DataType, Field, Schema};
-use futures_util::StreamExt;
-use lancedb::embeddings::sentence_transformers::SentenceTransformersEmbeddings;
-use lancedb::embeddings::{EmbeddingDefinition, EmbeddingFunction};
-use lancedb::query::{ExecutableQuery, QueryBase};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use crate::config::Config;
 use crate::context;
+use crate::embed;
 use crate::once;
 
 /// Approximate token count via whitespace word count.
@@ -135,8 +129,8 @@ the file content. Use your best judgment; if no timestamp is apparent, use 0.
 Extract as many distinct comprehension entries as are warranted by the content. Each entry should \
 be independently understandable without needing to read the source file.";
 
-/// Write comprehension entries to LanceDB.
-pub async fn write_to_lancedb(
+/// Write comprehension entries to sqlite-vec DB.
+pub async fn write_to_db(
     db_path: &Path,
     entries: Vec<(String, i64, String)>, // (summary, timestamp, file_reference)
 ) -> Result<()> {
@@ -144,50 +138,57 @@ pub async fn write_to_lancedb(
         return Ok(());
     }
 
-    let embedding = Arc::new(SentenceTransformersEmbeddings::builder().build()?);
-
-    let db = lancedb::connect(db_path.to_str().unwrap())
-        .execute()
-        .await?;
-    db.embedding_registry()
-        .register("sentence-transformers", embedding.clone())?;
-
-    let summaries: Vec<&str> = entries.iter().map(|(s, _, _)| s.as_str()).collect();
-    let timestamps: Vec<i64> = entries.iter().map(|(_, t, _)| *t).collect();
-    let file_refs: Vec<&str> = entries.iter().map(|(_, _, f)| f.as_str()).collect();
-
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("summary", DataType::Utf8, false),
-        Field::new("timestamp", DataType::Int64, false),
-        Field::new("file_reference", DataType::Utf8, false),
-    ]));
-
-    let batch = RecordBatch::try_new(
-        schema.clone(),
-        vec![
-            Arc::new(StringArray::from(summaries)),
-            Arc::new(Int64Array::from(timestamps)),
-            Arc::new(StringArray::from(file_refs)),
-        ],
-    )?;
-
-    let table_exists = db.open_table("comprehensions").execute().await.is_ok();
-
-    if table_exists {
-        let table = db.open_table("comprehensions").execute().await?;
-        let reader = Box::new(RecordBatchIterator::new(vec![Ok(batch)], schema));
-        table.add(reader).execute().await?;
-    } else {
-        let reader = Box::new(RecordBatchIterator::new(vec![Ok(batch)], schema));
-        db.create_table("comprehensions", reader)
-            .add_embedding(EmbeddingDefinition::new(
-                "summary",
-                "sentence-transformers",
-                Some("summary_embedding"),
-            ))?
-            .execute()
-            .await?;
+    // If db_path is a directory (old lancedb), remove it first
+    if db_path.is_dir() {
+        fs::remove_dir_all(db_path)?;
     }
+
+    let summary_strs: Vec<String> = entries.iter().map(|(s, _, _)| s.clone()).collect();
+
+    // Batch-embed summaries
+    let embeddings =
+        tokio::task::spawn_blocking(move || embed::embed_batch(summary_strs)).await??;
+
+    let db_path = db_path.to_path_buf();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let conn = embed::open_db(&db_path)?;
+
+        // Create tables if not exist
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS comprehensions (
+                summary TEXT NOT NULL,
+                timestamp INTEGER NOT NULL,
+                file_reference TEXT NOT NULL
+             );
+             CREATE VIRTUAL TABLE IF NOT EXISTS comprehensions_vec USING vec0(embedding float[384]);",
+        )?;
+
+        // Find max rowid to continue from
+        let max_rowid: i64 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(rowid), 0) FROM comprehensions",
+                [],
+                |row| row.get(0),
+            )?;
+
+        let tx = conn.unchecked_transaction()?;
+        for (i, (summary, ts, file_ref)) in entries.iter().enumerate() {
+            let rowid = max_rowid + (i as i64) + 1;
+            tx.execute(
+                "INSERT INTO comprehensions (rowid, summary, timestamp, file_reference)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![rowid, summary, ts, file_ref],
+            )?;
+            tx.execute(
+                "INSERT INTO comprehensions_vec (rowid, embedding) VALUES (?1, ?2)",
+                rusqlite::params![rowid, embed::f32_to_bytes(&embeddings[i])],
+            )?;
+        }
+        tx.commit()?;
+
+        Ok(())
+    })
+    .await??;
 
     Ok(())
 }
@@ -206,149 +207,116 @@ pub async fn retrieve(
     top_k: usize,
     time_range: Option<(i64, i64)>,
 ) -> Result<RetrieveResult> {
-    if !db_path.exists() {
+    if !db_path.exists() || db_path.is_dir() {
         return Ok(RetrieveResult {
             context: String::new(),
         });
     }
 
-    let embedding = Arc::new(SentenceTransformersEmbeddings::builder().build()?);
+    let query = query.to_string();
+    let db_path = db_path.to_path_buf();
 
-    let db = lancedb::connect(db_path.to_str().unwrap())
-        .execute()
-        .await?;
-    db.embedding_registry()
-        .register("sentence-transformers", embedding.clone())?;
+    tokio::task::spawn_blocking(move || -> Result<RetrieveResult> {
+        let query_vec = embed::embed_query(&query)?;
 
-    let table = match db.open_table("comprehensions").execute().await {
-        Ok(t) => t,
-        Err(_) => {
+        let conn = embed::open_db(&db_path)?;
+
+        let table_exists: bool = conn
+            .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='comprehensions'")?
+            .exists([])?;
+        if !table_exists {
             return Ok(RetrieveResult {
                 context: String::new(),
             });
         }
-    };
 
-    let query_arr = Arc::new(StringArray::from_iter_values(std::iter::once(query)));
-    let query_vector = embedding.compute_query_embeddings(query_arr)?;
+        let fetch_limit = if time_range.is_some() {
+            top_k * 5
+        } else {
+            top_k
+        };
 
-    let mut search = table
-        .vector_search(query_vector)?
-        .column("summary_embedding")
-        .limit(top_k);
+        let mut stmt = conn.prepare(
+            "SELECT e.summary, e.timestamp, e.file_reference
+             FROM comprehensions_vec v
+             JOIN comprehensions e ON e.rowid = v.rowid
+             WHERE v.embedding MATCH ?1 AND k = ?2
+             ORDER BY v.distance",
+        )?;
 
-    if let Some((start, end)) = time_range {
-        search = search.only_if(format!("timestamp >= {start} AND timestamp <= {end}"));
-    }
+        let query_bytes = embed::f32_to_bytes(&query_vec);
 
-    let mut results = search.execute().await?;
-
-    let mut entries = Vec::new();
-
-    while let Some(batch) = results.next().await {
-        let batch = batch?;
-
-        let summary_col = batch
-            .column_by_name("summary")
-            .unwrap()
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .unwrap();
-
-        let file_ref_col = batch
-            .column_by_name("file_reference")
-            .unwrap()
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .unwrap();
-
-        let ts_col = batch
-            .column_by_name("timestamp")
-            .unwrap()
-            .as_any()
-            .downcast_ref::<Int64Array>()
-            .unwrap();
-
-        for i in 0..batch.num_rows() {
-            let summary = summary_col.value(i);
-            let file_ref = file_ref_col.value(i);
-            let ts = ts_col.value(i);
-            entries.push(format!("[{file_ref} @ {ts}] {summary}"));
+        struct Row {
+            summary: String,
+            timestamp: i64,
+            file_reference: String,
         }
-    }
 
-    let context = entries.join("\n\n");
+        let rows: Vec<Row> = stmt
+            .query_map(rusqlite::params![query_bytes, fetch_limit as i64], |row| {
+                Ok(Row {
+                    summary: row.get(0)?,
+                    timestamp: row.get(1)?,
+                    file_reference: row.get(2)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
 
-    Ok(RetrieveResult { context })
+        let filtered: Vec<&Row> = if let Some((start, end)) = time_range {
+            rows.iter()
+                .filter(|r| r.timestamp >= start && r.timestamp <= end)
+                .take(top_k)
+                .collect()
+        } else {
+            rows.iter().collect()
+        };
+
+        let entries: Vec<String> = filtered
+            .iter()
+            .map(|r| format!("[{} @ {}] {}", r.file_reference, r.timestamp, r.summary))
+            .collect();
+
+        let context = entries.join("\n\n");
+
+        Ok(RetrieveResult { context })
+    })
+    .await?
 }
 
-/// Dump all comprehension entries from LanceDB as JSON to stdout.
+/// Dump all comprehension entries as JSON to stdout.
 pub async fn dump_json(config: &Config) -> Result<()> {
     let db_path = config.comprehensions_dir();
 
-    if !db_path.exists() {
-        println!("[]");
+    if !db_path.exists() || db_path.is_dir() {
         return Ok(());
     }
 
-    let db = lancedb::connect(db_path.to_str().unwrap())
-        .execute()
-        .await?;
+    let db_path_owned = db_path.to_path_buf();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let conn = embed::open_db(&db_path_owned)?;
 
-    let table = match db.open_table("comprehensions").execute().await {
-        Ok(t) => t,
-        Err(_) => {
-            println!("[]");
+        let table_exists: bool = conn
+            .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='comprehensions'")?
+            .exists([])?;
+        if !table_exists {
             return Ok(());
         }
-    };
 
-    let mut results = table
-        .query()
-        .select(lancedb::query::Select::columns(&[
-            "summary",
-            "timestamp",
-            "file_reference",
-        ]))
-        .execute()
-        .await?;
-
-    let mut entries = Vec::new();
-
-    while let Some(batch) = results.next().await {
-        let batch = batch?;
-
-        let summary_col = batch
-            .column_by_name("summary")
-            .unwrap()
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .unwrap();
-
-        let ts_col = batch
-            .column_by_name("timestamp")
-            .unwrap()
-            .as_any()
-            .downcast_ref::<Int64Array>()
-            .unwrap();
-
-        let file_ref_col = batch
-            .column_by_name("file_reference")
-            .unwrap()
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .unwrap();
-
-        for i in 0..batch.num_rows() {
-            entries.push(serde_json::json!({
-                "summary": summary_col.value(i),
-                "timestamp": ts_col.value(i),
-                "file_reference": file_ref_col.value(i),
-            }));
+        let mut stmt =
+            conn.prepare("SELECT summary, timestamp, file_reference FROM comprehensions")?;
+        let mut rows = stmt.query([])?;
+        while let Some(row) = rows.next()? {
+            let entry = serde_json::json!({
+                "summary": row.get_ref(0)?.as_str()?,
+                "timestamp": row.get::<_, i64>(1)?,
+                "file_reference": row.get_ref(2)?.as_str()?,
+            });
+            println!("{}", serde_json::to_string(&entry)?);
         }
-    }
+        Ok(())
+    })
+    .await??;
 
-    println!("{}", serde_json::to_string_pretty(&entries)?);
     Ok(())
 }
 
@@ -356,73 +324,46 @@ pub async fn dump_json(config: &Config) -> Result<()> {
 pub async fn search_json(config: &Config, query: &str, top_k: usize) -> Result<()> {
     let db_path = config.comprehensions_dir();
 
-    if !db_path.exists() {
-        println!("[]");
+    if !db_path.exists() || db_path.is_dir() {
         return Ok(());
     }
 
-    let embedding = Arc::new(SentenceTransformersEmbeddings::builder().build()?);
+    let query = query.to_string();
+    let db_path_owned = db_path.to_path_buf();
 
-    let db = lancedb::connect(db_path.to_str().unwrap())
-        .execute()
-        .await?;
-    db.embedding_registry()
-        .register("sentence-transformers", embedding.clone())?;
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let query_vec = embed::embed_query(&query)?;
+        let conn = embed::open_db(&db_path_owned)?;
 
-    let table = match db.open_table("comprehensions").execute().await {
-        Ok(t) => t,
-        Err(_) => {
-            println!("[]");
+        let table_exists: bool = conn
+            .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='comprehensions'")?
+            .exists([])?;
+        if !table_exists {
             return Ok(());
         }
-    };
 
-    let query_arr = Arc::new(StringArray::from_iter_values(std::iter::once(query)));
-    let query_vector = embedding.compute_query_embeddings(query_arr)?;
+        let mut stmt = conn.prepare(
+            "SELECT e.summary, e.timestamp, e.file_reference
+             FROM comprehensions_vec v
+             JOIN comprehensions e ON e.rowid = v.rowid
+             WHERE v.embedding MATCH ?1 AND k = ?2
+             ORDER BY v.distance",
+        )?;
 
-    let mut results = table
-        .vector_search(query_vector)?
-        .column("summary_embedding")
-        .limit(top_k)
-        .execute()
-        .await?;
-
-    let mut entries = Vec::new();
-
-    while let Some(batch) = results.next().await {
-        let batch = batch?;
-
-        let summary_col = batch
-            .column_by_name("summary")
-            .unwrap()
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .unwrap();
-
-        let ts_col = batch
-            .column_by_name("timestamp")
-            .unwrap()
-            .as_any()
-            .downcast_ref::<Int64Array>()
-            .unwrap();
-
-        let file_ref_col = batch
-            .column_by_name("file_reference")
-            .unwrap()
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .unwrap();
-
-        for i in 0..batch.num_rows() {
-            entries.push(serde_json::json!({
-                "summary": summary_col.value(i),
-                "timestamp": ts_col.value(i),
-                "file_reference": file_ref_col.value(i),
-            }));
+        let query_bytes = embed::f32_to_bytes(&query_vec);
+        let mut rows = stmt.query(rusqlite::params![query_bytes, top_k as i64])?;
+        while let Some(row) = rows.next()? {
+            let entry = serde_json::json!({
+                "summary": row.get_ref(0)?.as_str()?,
+                "timestamp": row.get::<_, i64>(1)?,
+                "file_reference": row.get_ref(2)?.as_str()?,
+            });
+            println!("{}", serde_json::to_string(&entry)?);
         }
-    }
+        Ok(())
+    })
+    .await??;
 
-    println!("{}", serde_json::to_string_pretty(&entries)?);
     Ok(())
 }
 
@@ -484,9 +425,9 @@ pub async fn run(config: &Config, force: bool) -> Result<bool> {
     }
 
     let db_path = config.comprehensions_dir();
-    write_to_lancedb(&db_path, all_entries).await?;
+    write_to_db(&db_path, all_entries).await?;
     eprintln!(
-        "[comprehension] wrote comprehensions to LanceDB: {}",
+        "[comprehension] wrote comprehensions to {}",
         db_path.display()
     );
 

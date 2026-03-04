@@ -4,6 +4,7 @@ mod config;
 mod context;
 mod contextual_indexer;
 mod dream;
+mod embed;
 mod evals;
 mod matrix_bot;
 mod once;
@@ -52,7 +53,7 @@ enum Command {
     },
     /// Start the interactive CLI bot
     CliBot,
-    /// Dump all comprehension entries from LanceDB as JSON
+    /// Dump all comprehension entries as JSON
     DumpComprehensions,
     /// Search comprehensions by semantic similarity and print top matches as JSON
     SearchComprehensions {

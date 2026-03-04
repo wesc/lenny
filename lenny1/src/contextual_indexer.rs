@@ -1,17 +1,11 @@
 use anyhow::Result;
-use arrow_array::{Int32Array, RecordBatch, RecordBatchIterator, StringArray};
-use arrow_schema::{DataType, Field, Schema};
-use futures_util::StreamExt;
-use lancedb::embeddings::sentence_transformers::SentenceTransformersEmbeddings;
-use lancedb::embeddings::{EmbeddingDefinition, EmbeddingFunction};
-use lancedb::query::{ExecutableQuery, QueryBase};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::Arc;
 
 use crate::config::Config;
+use crate::embed;
 use crate::once;
 
 /// Output from the fold step: running summary + contextual enrichment.
@@ -63,7 +57,7 @@ pub fn flatten_windows(windows: Vec<Vec<(String, String)>>) -> String {
 }
 
 /// Build the contextual index. For each document, generate an enrichment via LLM
-/// and store in LanceDB with an optional timestamp per document.
+/// and store in sqlite-vec with an optional timestamp per document.
 pub async fn build_index(
     db_path: &Path,
     documents: &[(String, String)],
@@ -71,15 +65,6 @@ pub async fn build_index(
     config: &Config,
     window_size: usize,
 ) -> Result<()> {
-    let embedding = Arc::new(SentenceTransformersEmbeddings::builder().build()?);
-
-    let db = lancedb::connect(db_path.to_str().unwrap())
-        .execute()
-        .await?;
-    db.embedding_registry()
-        .register("sentence-transformers", embedding.clone())?;
-
-    let mut ids = Vec::new();
     let mut doc_names = Vec::new();
     let mut enrichments = Vec::new();
     let mut window_docs_json = Vec::new();
@@ -105,42 +90,59 @@ pub async fn build_index(
 
         summary = output.summary;
 
-        ids.push(i as i32);
         doc_names.push(name.clone());
         enrichments.push(output.enrichment);
         window_docs_json.push(window_json);
         ts_col.push(timestamps.get(i).cloned().unwrap_or_default());
     }
 
-    let schema = Arc::new(Schema::new(vec![
-        Field::new("id", DataType::Int32, false),
-        Field::new("doc_name", DataType::Utf8, false),
-        Field::new("enrichment", DataType::Utf8, false),
-        Field::new("window_docs", DataType::Utf8, false),
-        Field::new("timestamp", DataType::Utf8, false),
-    ]));
+    // Batch-embed enrichments (synchronous, run on blocking thread)
+    let enrichment_strs: Vec<String> = enrichments.clone();
+    let embeddings =
+        tokio::task::spawn_blocking(move || embed::embed_batch(enrichment_strs)).await??;
 
-    let batch = RecordBatch::try_new(
-        schema.clone(),
-        vec![
-            Arc::new(Int32Array::from(ids)),
-            Arc::new(StringArray::from(doc_names)),
-            Arc::new(StringArray::from(enrichments)),
-            Arc::new(StringArray::from(window_docs_json)),
-            Arc::new(StringArray::from(ts_col)),
-        ],
-    )?;
+    // Write to sqlite-vec
+    let db_path = db_path.to_path_buf();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let conn = embed::open_db(&db_path)?;
 
-    let reader = Box::new(RecordBatchIterator::new(vec![Ok(batch)], schema));
+        conn.execute_batch(
+            "DROP TABLE IF EXISTS entries_vec;
+             DROP TABLE IF EXISTS entries;",
+        )?;
+        conn.execute_batch(
+            "CREATE TABLE entries (
+                doc_name TEXT NOT NULL,
+                enrichment TEXT NOT NULL,
+                window_docs TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+             );
+             CREATE VIRTUAL TABLE entries_vec USING vec0(embedding float[384]);",
+        )?;
 
-    db.create_table("entries", reader)
-        .add_embedding(EmbeddingDefinition::new(
-            "enrichment",
-            "sentence-transformers",
-            Some("enrichment_embedding"),
-        ))?
-        .execute()
-        .await?;
+        let tx = conn.unchecked_transaction()?;
+        for i in 0..doc_names.len() {
+            tx.execute(
+                "INSERT INTO entries (rowid, doc_name, enrichment, window_docs, timestamp)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![
+                    (i + 1) as i64,
+                    doc_names[i],
+                    enrichments[i],
+                    window_docs_json[i],
+                    ts_col[i],
+                ],
+            )?;
+            tx.execute(
+                "INSERT INTO entries_vec (rowid, embedding) VALUES (?1, ?2)",
+                rusqlite::params![(i + 1) as i64, embed::f32_to_bytes(&embeddings[i])],
+            )?;
+        }
+        tx.commit()?;
+
+        Ok(())
+    })
+    .await??;
 
     Ok(())
 }
@@ -161,8 +163,6 @@ pub async fn retrieve(
     top_k: usize,
     time_range: Option<(&str, &str)>,
 ) -> Result<RetrieveResult> {
-    let db_uri = db_path.to_str().unwrap();
-
     if !db_path.exists() {
         return Ok(RetrieveResult {
             matched_docs: Vec::new(),
@@ -170,63 +170,76 @@ pub async fn retrieve(
         });
     }
 
-    let embedding = Arc::new(SentenceTransformersEmbeddings::builder().build()?);
+    let query = query.to_string();
+    let db_path = db_path.to_path_buf();
+    let time_range = time_range.map(|(s, e)| (s.to_string(), e.to_string()));
 
-    let db = lancedb::connect(db_uri).execute().await?;
-    db.embedding_registry()
-        .register("sentence-transformers", embedding.clone())?;
+    tokio::task::spawn_blocking(move || -> Result<RetrieveResult> {
+        let query_vec = embed::embed_query(&query)?;
 
-    let table = match db.open_table("entries").execute().await {
-        Ok(t) => t,
-        Err(_) => {
+        let conn = embed::open_db(&db_path)?;
+
+        // Check if table exists
+        let table_exists: bool = conn
+            .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='entries'")?
+            .exists([])?;
+        if !table_exists {
             return Ok(RetrieveResult {
                 matched_docs: Vec::new(),
                 context: String::new(),
             });
         }
-    };
 
-    let query_arr = Arc::new(StringArray::from_iter_values(std::iter::once(query)));
-    let query_vector = embedding.compute_query_embeddings(query_arr)?;
+        // Over-fetch when time filtering, then filter in Rust
+        let fetch_limit = if time_range.is_some() {
+            top_k * 5
+        } else {
+            top_k
+        };
 
-    let mut search = table
-        .vector_search(query_vector)?
-        .column("enrichment_embedding")
-        .limit(top_k);
+        let mut stmt = conn.prepare(
+            "SELECT e.doc_name, e.window_docs, e.timestamp
+             FROM entries_vec v
+             JOIN entries e ON e.rowid = v.rowid
+             WHERE v.embedding MATCH ?1 AND k = ?2
+             ORDER BY v.distance",
+        )?;
 
-    if let Some((start, end)) = time_range {
-        search = search.only_if(format!("timestamp >= '{start}' AND timestamp <= '{end}'"));
-    }
+        let query_bytes = embed::f32_to_bytes(&query_vec);
 
-    let mut results = search.execute().await?;
-
-    let mut matched_docs = Vec::new();
-    let mut windows: Vec<Vec<(String, String)>> = Vec::new();
-
-    while let Some(batch) = results.next().await {
-        let batch = batch?;
-
-        // Collect matched doc names
-        let doc_name_col = batch
-            .column_by_name("doc_name")
-            .unwrap()
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .unwrap();
-        for val in doc_name_col.iter().flatten() {
-            matched_docs.push(val.to_string());
+        struct Row {
+            doc_name: String,
+            window_docs: String,
+            timestamp: String,
         }
 
-        // Collect window docs
-        let window_col = batch
-            .column_by_name("window_docs")
-            .unwrap()
-            .as_any()
-            .downcast_ref::<StringArray>()
-            .unwrap();
+        let rows: Vec<Row> = stmt
+            .query_map(rusqlite::params![query_bytes, fetch_limit as i64], |row| {
+                Ok(Row {
+                    doc_name: row.get(0)?,
+                    window_docs: row.get(1)?,
+                    timestamp: row.get(2)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
 
-        for val in window_col.iter().flatten() {
-            let entries: Vec<serde_json::Value> = serde_json::from_str(val)?;
+        // Apply time filter in Rust
+        let filtered: Vec<&Row> = if let Some((start, end)) = &time_range {
+            rows.iter()
+                .filter(|r| r.timestamp.as_str() >= start.as_str() && r.timestamp.as_str() <= end.as_str())
+                .take(top_k)
+                .collect()
+        } else {
+            rows.iter().collect()
+        };
+
+        let mut matched_docs = Vec::new();
+        let mut windows: Vec<Vec<(String, String)>> = Vec::new();
+
+        for row in &filtered {
+            matched_docs.push(row.doc_name.clone());
+
+            let entries: Vec<serde_json::Value> = serde_json::from_str(&row.window_docs)?;
             let parsed: Vec<(String, String)> = entries
                 .into_iter()
                 .map(|e| {
@@ -238,16 +251,17 @@ pub async fn retrieve(
                 .collect();
             windows.push(parsed);
         }
-    }
 
-    let context = if windows.is_empty() {
-        String::new()
-    } else {
-        flatten_windows(windows)
-    };
+        let context = if windows.is_empty() {
+            String::new()
+        } else {
+            flatten_windows(windows)
+        };
 
-    Ok(RetrieveResult {
-        matched_docs,
-        context,
+        Ok(RetrieveResult {
+            matched_docs,
+            context,
+        })
     })
+    .await?
 }

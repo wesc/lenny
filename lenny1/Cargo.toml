@@ -18,14 +18,14 @@ clap = { version = "4", features = ["derive"] }
 rand = "0.9"
 regex = "1"
 tempfile = "3"
-matrix-sdk = { version = "0.16", features = ["sqlite"] }
-reqwest = "0.12"
+matrix-sdk = { version = "0.16", default-features = false, features = ["rustls-tls", "sqlite", "e2e-encryption", "automatic-room-key-forwarding"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 futures-util = "0.3"
 url = "2"
 schemars = "1"
 html-to-markdown-rs = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-lancedb = { version = "0.26.2", features = ["sentence-transformers"] }
-arrow-array = "57"
-arrow-schema = "57"
+fastembed = "5"
+rusqlite = { version = "0.37", features = ["bundled"] }
+sqlite-vec = "0.1"
