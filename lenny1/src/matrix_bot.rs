@@ -8,7 +8,11 @@ use matrix_sdk::{
         OwnedUserId,
         events::{
             reaction::OriginalSyncReactionEvent,
-            room::message::{MessageType, OriginalSyncRoomMessageEvent, RoomMessageEventContent},
+            relation::Thread,
+            room::member::StrippedRoomMemberEvent,
+            room::message::{
+                MessageType, OriginalSyncRoomMessageEvent, Relation, RoomMessageEventContent,
+            },
         },
     },
     sliding_sync::Version,
@@ -197,6 +201,11 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
             let mentioned = is_mentioned(&event, &bot_user_id, &body);
             let event_sender = event.sender.clone();
             let event_id = event.event_id.to_string();
+            let reply_to_event_id = event.event_id.clone();
+            let thread_root = event.content.relates_to.as_ref().and_then(|rel| match rel {
+                Relation::Thread(thread) => Some(thread.event_id.clone()),
+                _ => None,
+            });
             let timestamp: u64 = event.origin_server_ts.0.into();
 
             tokio::spawn(async move {
@@ -234,11 +243,28 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
                     return;
                 }
 
+                // Skip messages older than 60 seconds
+                let now_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64;
+                let age_secs = now_ms.saturating_sub(timestamp) / 1000;
+                if age_secs > 60 {
+                    eprintln!("Skipping stale mention in {room_name} ({age_secs}s old): {body}");
+                    return;
+                }
+
                 eprintln!("Mentioned in {room_name} by {sender}: {body}");
 
                 match once::run_prompt(&config, &body).await {
                     Ok(result) if !result.skipped => {
-                        let content = RoomMessageEventContent::text_plain(&result.answer);
+                        let mut content = RoomMessageEventContent::text_plain(&result.answer);
+                        if let Some(thread_root) = thread_root {
+                            // Reply within the existing thread
+                            let mut thread = Thread::plain(thread_root, reply_to_event_id);
+                            thread.is_falling_back = false;
+                            content.relates_to = Some(Relation::Thread(thread));
+                        }
                         let t0 = std::time::Instant::now();
                         if let Err(e) = room.send(content).await {
                             eprintln!("Failed to send reply: {e}");
@@ -318,6 +344,35 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
                 let path = out_dir.join(&filename);
                 if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&path) {
                     let _ = writeln!(file, "{line}");
+                }
+            });
+        }
+    });
+
+    // Auto-join rooms we're invited to
+    let bot_user_id_for_invite = client.user_id().expect("should be logged in").to_owned();
+    client.add_event_handler(move |event: StrippedRoomMemberEvent, room: Room| {
+        let bot_user_id = bot_user_id_for_invite.clone();
+        async move {
+            // Only act on invites addressed to us
+            if event.state_key != bot_user_id {
+                return;
+            }
+            let room_name = room.room_id().to_string();
+            eprintln!("Invited to {room_name} by {}", event.sender);
+            tokio::spawn(async move {
+                // Retry a few times — the room may not be ready immediately
+                for attempt in 0..3 {
+                    match room.join().await {
+                        Ok(_) => {
+                            eprintln!("Joined {room_name}");
+                            return;
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to join {room_name} (attempt {}): {e}", attempt + 1);
+                            tokio::time::sleep(Duration::from_secs(2)).await;
+                        }
+                    }
                 }
             });
         }
