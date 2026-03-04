@@ -26,7 +26,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use url::Url;
 
-use crate::config::Config;
+use crate::config::{Config, RespondTo};
 use crate::{cli_bot, once};
 
 fn sanitize_room_name(name: &str) -> String {
@@ -198,7 +198,16 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
             eprintln!("[{room_name}] {sender}: {body}");
 
             // Spawn all heavy work (file I/O, member lookup, LLM) off the sync loop
-            let mentioned = is_mentioned(&event, &bot_user_id, &body);
+            let respond_to = config
+                .matrix
+                .as_ref()
+                .map(|m| m.respond_to)
+                .unwrap_or(RespondTo::Mention);
+            let should_respond = match respond_to {
+                RespondTo::All => true,
+                RespondTo::Mention => is_mentioned(&event, &bot_user_id, &body),
+                RespondTo::None => false,
+            };
             let event_sender = event.sender.clone();
             let event_id = event.event_id.to_string();
             let reply_to_event_id = event.event_id.clone();
@@ -239,7 +248,7 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
                     let _ = writeln!(file, "{line}");
                 }
 
-                if !mentioned {
+                if !should_respond {
                     return;
                 }
 
@@ -250,11 +259,11 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
                     .as_millis() as u64;
                 let age_secs = now_ms.saturating_sub(timestamp) / 1000;
                 if age_secs > 60 {
-                    eprintln!("Skipping stale mention in {room_name} ({age_secs}s old): {body}");
+                    eprintln!("Skipping stale message in {room_name} ({age_secs}s old): {body}");
                     return;
                 }
 
-                eprintln!("Mentioned in {room_name} by {sender}: {body}");
+                eprintln!("Responding in {room_name} to {sender}: {body}");
 
                 match once::run_prompt(&config, &body).await {
                     Ok(result) if !result.skipped => {

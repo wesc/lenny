@@ -36,12 +36,26 @@ impl ProviderConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RespondTo {
+    Mention,
+    All,
+    None,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct MatrixConfig {
     pub homeserver: String,
     pub username: String,
     pub password: String,
     pub store_path: PathBuf,
+    #[serde(default = "default_respond_to")]
+    pub respond_to: RespondTo,
+}
+
+fn default_respond_to() -> RespondTo {
+    RespondTo::Mention
 }
 
 #[derive(Debug, Clone, Deserialize)]
