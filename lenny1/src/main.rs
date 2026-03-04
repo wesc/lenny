@@ -41,26 +41,62 @@ enum Command {
         #[arg(long)]
         force_comprehension: bool,
     },
-    /// Run basic eval battery against fixture data and print results as JSON
-    EvalBasic,
+    /// Run eval suites
+    Eval {
+        #[command(subcommand)]
+        suite: EvalSuite,
+    },
+    /// Matrix chat bot
+    Matrix {
+        #[command(subcommand)]
+        cmd: MatrixCmd,
+    },
+    /// CLI chat bot
+    Cli {
+        #[command(subcommand)]
+        cmd: CliCmd,
+    },
+    /// Comprehension index operations
+    Comprehension {
+        #[command(subcommand)]
+        cmd: ComprehensionCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum EvalSuite {
+    /// Run basic eval battery
+    Basic,
     /// Run contextual eval suite against chat fixture data
-    EvalContextualChats,
+    ContextualChats,
     /// Run contextual eval suite against text fixture data
-    EvalContextualTexts,
+    ContextualTexts,
     /// Run both contextual eval suites (chats + texts)
-    EvalContextualAll,
+    ContextualAll,
+}
+
+#[derive(Subcommand)]
+enum MatrixCmd {
     /// Start the Matrix chat bot
-    MatrixBot {
+    Bot {
         /// Clear sync state and re-sync from scratch (keeps device identity)
         #[arg(long)]
         reset: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum CliCmd {
     /// Start the interactive CLI bot
-    CliBot,
+    Bot,
+}
+
+#[derive(Subcommand)]
+enum ComprehensionCmd {
     /// Dump all comprehension entries as JSON
-    DumpComprehensions,
-    /// Search comprehensions by semantic similarity and print top matches as JSON
-    SearchComprehensions {
+    Dump,
+    /// Search comprehensions by semantic similarity
+    Search {
         /// The search query
         #[arg(required = true, trailing_var_arg = true)]
         query: Vec<String>,
@@ -83,73 +119,42 @@ async fn main() {
         process::exit(1);
     });
 
-    match cli.command {
+    let result = match cli.command {
         Command::Once { prompt } => {
             let prompt = prompt.join(" ");
-            if let Err(e) = once::run(&config, &prompt).await {
-                eprintln!("Error: {e}");
-                process::exit(1);
-            }
+            once::run(&config, &prompt).await
         }
         Command::Dream { force_comprehension } => {
-            if let Err(e) = dream::run(&config, force_comprehension).await {
-                eprintln!("Error: {e}");
-                process::exit(1);
-            }
+            dream::run(&config, force_comprehension).await
         }
-        Command::EvalBasic => {
-            if let Err(e) = evals::run(&config).await {
-                eprintln!("Error: {e}");
-                process::exit(1);
+        Command::Eval { suite } => match suite {
+            EvalSuite::Basic => evals::run(&config).await,
+            EvalSuite::ContextualChats => evals::contextual_chats::run(&config).await,
+            EvalSuite::ContextualTexts => evals::contextual_texts::run(&config).await,
+            EvalSuite::ContextualAll => evals::contextual_all::run(&config).await,
+        },
+        Command::Matrix { cmd } => match cmd {
+            MatrixCmd::Bot { reset } => matrix_bot::run(&config, reset).await,
+        },
+        Command::Cli { cmd } => match cmd {
+            CliCmd::Bot => {
+                let stdin = io::stdin();
+                let mut input = BufReader::new(stdin.lock());
+                let mut output = io::stdout();
+                cli_bot::chat_loop(&config, &mut input, &mut output).await
             }
-        }
-        Command::EvalContextualChats => {
-            if let Err(e) = evals::contextual_chats::run(&config).await {
-                eprintln!("Error: {e}");
-                process::exit(1);
-            }
-        }
-        Command::EvalContextualTexts => {
-            if let Err(e) = evals::contextual_texts::run(&config).await {
-                eprintln!("Error: {e}");
-                process::exit(1);
-            }
-        }
-        Command::EvalContextualAll => {
-            if let Err(e) = evals::contextual_all::run(&config).await {
-                eprintln!("Error: {e}");
-                process::exit(1);
-            }
-        }
-        Command::MatrixBot { reset } => {
-            if let Err(e) = matrix_bot::run(&config, reset).await {
-                eprintln!("Error: {e}");
-                process::exit(1);
-            }
-        }
-        Command::DumpComprehensions => {
-            if let Err(e) = actions::comprehension::dump_json(&config).await {
-                eprintln!("Error: {e}");
-                process::exit(1);
-            }
-        }
-        Command::SearchComprehensions { query, n } => {
-            let query = query.join(" ");
-            if let Err(e) =
+        },
+        Command::Comprehension { cmd } => match cmd {
+            ComprehensionCmd::Dump => actions::comprehension::dump_json(&config).await,
+            ComprehensionCmd::Search { query, n } => {
+                let query = query.join(" ");
                 actions::comprehension::search_json(&config, &query, n).await
-            {
-                eprintln!("Error: {e}");
-                process::exit(1);
             }
-        }
-        Command::CliBot => {
-            let stdin = io::stdin();
-            let mut input = BufReader::new(stdin.lock());
-            let mut output = io::stdout();
-            if let Err(e) = cli_bot::chat_loop(&config, &mut input, &mut output).await {
-                eprintln!("Error: {e}");
-                process::exit(1);
-            }
-        }
+        },
+    };
+
+    if let Err(e) = result {
+        eprintln!("Error: {e}");
+        process::exit(1);
     }
 }
