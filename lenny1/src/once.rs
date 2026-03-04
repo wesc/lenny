@@ -1,15 +1,17 @@
 use anyhow::Result;
 use rig::client::{CompletionClient, Nothing};
-use rig::completion::{Prompt, TypedPrompt};
+use rig::completion::TypedPrompt;
 use rig::providers::{ollama, openrouter};
+use schemars::JsonSchema;
+use serde::de::DeserializeOwned;
 use serde_json::json;
 use std::fs;
 
 use crate::config::{Config, ProviderConfig};
 use crate::context;
 use crate::tools::{
-    AgentEvent, AgentHook, AgentOutput, AgentState, LookupReferenceTool, RandomLetterTool,
-    RandomNumberTool, WebScrapeTool,
+    AgentEvent, AgentHook, AgentOutput, AgentState, ContextSearchTool, LookupReferenceTool,
+    RandomLetterTool, RandomNumberTool, WebScrapeTool,
 };
 
 /// Result of running a single prompt through the agent.
@@ -43,12 +45,17 @@ async fn run_with_client<C: CompletionClient>(
         references_dir: config.references_dir(),
     };
 
+    let context_search = ContextSearchTool {
+        db_path: config.knowledge_dir.join("comprehensions"),
+    };
+
     let full_preamble = format!("{preamble}\n\n{OUTPUT_INSTRUCTIONS}");
 
     let mut builder = client
         .agent(model)
         .preamble(&full_preamble)
         .tool(lookup_ref)
+        .tool(context_search)
         .tool(RandomNumberTool)
         .tool(RandomLetterTool)
         .tool(WebScrapeTool)
@@ -104,8 +111,13 @@ pub async fn run_prompt(config: &Config, user_prompt: &str) -> Result<PromptResu
     }
 }
 
-/// Simple completion: no tools, no hooks. For internal use (e.g. compaction).
-pub async fn run_completion(config: &Config, preamble: &str, prompt: &str) -> Result<String> {
+/// Simple completion: no tools, no hooks. For internal use (e.g. comprehension).
+/// Typed completion: no tools, no hooks. Uses rig's structured output for schema-enforced extraction.
+pub async fn run_completion_typed<T: DeserializeOwned + JsonSchema + Send>(
+    config: &Config,
+    preamble: &str,
+    prompt: &str,
+) -> Result<T> {
     match &config.provider {
         ProviderConfig::Ollama { url, model } => {
             let client: ollama::Client = ollama::Client::builder()
@@ -113,14 +125,14 @@ pub async fn run_completion(config: &Config, preamble: &str, prompt: &str) -> Re
                 .base_url(url)
                 .build()?;
             let agent = client.agent(model).preamble(preamble).build();
-            let response = agent.prompt(prompt).await?;
-            Ok(response)
+            let output: T = agent.prompt_typed(prompt).await?;
+            Ok(output)
         }
         ProviderConfig::OpenRouter { api_key, model } => {
             let client: openrouter::Client = openrouter::Client::new(api_key)?;
             let agent = client.agent(model).preamble(preamble).build();
-            let response = agent.prompt(prompt).await?;
-            Ok(response)
+            let output: T = agent.prompt_typed(prompt).await?;
+            Ok(output)
         }
     }
 }

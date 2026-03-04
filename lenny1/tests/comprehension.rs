@@ -1,4 +1,4 @@
-use lenny1::actions::compact::{collect_dynamic_files, move_to_references, select_files_to_pop};
+use lenny1::actions::comprehension::{collect_dynamic_files, move_to_references, select_files_to_pop};
 use lenny1::config::{Config, ProviderConfig};
 use std::fs;
 
@@ -136,6 +136,6 @@ fn atomic_write_no_temp_files() {
 #[test]
 fn writes_comprehension_with_llm() {
     // This test requires a live LLM — skip in CI
-    // Tested manually: populate dynamic/ over threshold, run compact, verify
+    // Tested manually: populate dynamic/ over threshold, run comprehension, verify
     // comprehension file appears in comprehensions/
 }

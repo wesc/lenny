@@ -1,3 +1,5 @@
+pub mod contextual_indexer;
+
 use anyhow::Result;
 use regex::Regex;
 use serde_json::json;

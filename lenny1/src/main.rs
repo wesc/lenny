@@ -2,6 +2,7 @@ mod actions;
 mod cli_bot;
 mod config;
 mod context;
+mod contextual_indexer;
 mod dream;
 mod evals;
 mod matrix_bot;
@@ -34,9 +35,15 @@ enum Command {
         prompt: Vec<String>,
     },
     /// Watch system/, dynamic/, and references/ for changes
-    Dream,
+    Dream {
+        /// Force comprehension immediately without waiting for token thresholds
+        #[arg(long)]
+        force_comprehension: bool,
+    },
     /// Run basic eval battery against fixture data and print results as JSON
     EvalBasic,
+    /// Run contextual indexer eval suite against chat fixture data
+    EvalContextualIndexer,
     /// Start the Matrix chat bot
     MatrixBot {
         /// Clear sync state and re-sync from scratch (keeps device identity)
@@ -45,6 +52,17 @@ enum Command {
     },
     /// Start the interactive CLI bot
     CliBot,
+    /// Dump all comprehension entries from LanceDB as JSON
+    DumpComprehensions,
+    /// Search comprehensions by semantic similarity and print top matches as JSON
+    SearchComprehensions {
+        /// The search query
+        #[arg(required = true, trailing_var_arg = true)]
+        query: Vec<String>,
+        /// Number of results to return
+        #[arg(short, long, default_value = "5")]
+        n: usize,
+    },
 }
 
 #[tokio::main]
@@ -68,8 +86,8 @@ async fn main() {
                 process::exit(1);
             }
         }
-        Command::Dream => {
-            if let Err(e) = dream::run(&config).await {
+        Command::Dream { force_comprehension } => {
+            if let Err(e) = dream::run(&config, force_comprehension).await {
                 eprintln!("Error: {e}");
                 process::exit(1);
             }
@@ -80,8 +98,29 @@ async fn main() {
                 process::exit(1);
             }
         }
+        Command::EvalContextualIndexer => {
+            if let Err(e) = evals::contextual_indexer::run(&config).await {
+                eprintln!("Error: {e}");
+                process::exit(1);
+            }
+        }
         Command::MatrixBot { reset } => {
             if let Err(e) = matrix_bot::run(&config, reset).await {
+                eprintln!("Error: {e}");
+                process::exit(1);
+            }
+        }
+        Command::DumpComprehensions => {
+            if let Err(e) = actions::comprehension::dump_json(&config).await {
+                eprintln!("Error: {e}");
+                process::exit(1);
+            }
+        }
+        Command::SearchComprehensions { query, n } => {
+            let query = query.join(" ");
+            if let Err(e) =
+                actions::comprehension::search_json(&config, &query, n).await
+            {
                 eprintln!("Error: {e}");
                 process::exit(1);
             }

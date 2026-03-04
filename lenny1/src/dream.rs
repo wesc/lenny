@@ -13,7 +13,7 @@ fn is_hidden_path(path: &Path) -> bool {
         .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
 }
 
-pub async fn run(config: &Config) -> Result<()> {
+pub async fn run(config: &Config, force_comprehension: bool) -> Result<()> {
     // Run all actions once at startup
     eprintln!("Running initial actions...");
     let n = actions::run_all(config)?;
@@ -21,9 +21,14 @@ pub async fn run(config: &Config) -> Result<()> {
         eprintln!("{n} action(s) produced changes");
     }
 
-    // Run compaction at startup
-    if actions::compact::run(config).await? {
-        eprintln!("Initial compaction completed");
+    // Run comprehension at startup
+    if actions::comprehension::run(config, force_comprehension).await? {
+        eprintln!("Initial comprehension completed");
+    }
+
+    if force_comprehension {
+        eprintln!("Force comprehension completed, exiting.");
+        return Ok(());
     }
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DebounceEventResult>(100);
@@ -62,8 +67,8 @@ pub async fn run(config: &Config) -> Result<()> {
                     if let Err(e) = actions::run_all(config) {
                         eprintln!("Action error: {e}");
                     }
-                    if let Err(e) = actions::compact::run(config).await {
-                        eprintln!("Compact error: {e}");
+                    if let Err(e) = actions::comprehension::run(config, false).await {
+                        eprintln!("Comprehension error: {e}");
                     }
                 }
             }

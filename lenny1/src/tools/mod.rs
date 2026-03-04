@@ -1,8 +1,10 @@
+mod context_search;
 mod lookup_reference;
 mod random_letter;
 mod random_number;
 mod web_scrape;
 
+pub use context_search::ContextSearchTool;
 pub use lookup_reference::LookupReferenceTool;
 pub use random_letter::RandomLetterTool;
 pub use random_number::RandomNumberTool;

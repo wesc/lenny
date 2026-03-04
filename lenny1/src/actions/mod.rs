@@ -1,4 +1,4 @@
-pub mod compact;
+pub mod comprehension;
 pub mod sessionize_chats;
 
 use anyhow::Result;
