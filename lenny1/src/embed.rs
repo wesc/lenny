@@ -1,9 +1,10 @@
 use anyhow::Result;
-use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use fastembed::{EmbeddingModel, InitOptions, RerankInitOptions, RerankResult, RerankerModel, TextEmbedding, TextRerank};
 use rusqlite::Connection;
 use std::sync::{Mutex, OnceLock};
 
 static EMBEDDING_MODEL: OnceLock<Mutex<TextEmbedding>> = OnceLock::new();
+static RERANK_MODEL: OnceLock<Mutex<TextRerank>> = OnceLock::new();
 
 fn get_model() -> &'static Mutex<TextEmbedding> {
     EMBEDDING_MODEL.get_or_init(|| {
@@ -12,6 +13,21 @@ fn get_model() -> &'static Mutex<TextEmbedding> {
                 .expect("failed to initialize fastembed model"),
         )
     })
+}
+
+fn get_reranker() -> &'static Mutex<TextRerank> {
+    RERANK_MODEL.get_or_init(|| {
+        Mutex::new(
+            TextRerank::try_new(RerankInitOptions::new(RerankerModel::JINARerankerV1TurboEn))
+                .expect("failed to initialize reranker model"),
+        )
+    })
+}
+
+/// Rerank documents against a query, returning results sorted by score descending.
+pub fn rerank(query: &str, documents: &[&str]) -> Result<Vec<RerankResult>> {
+    let mut model = get_reranker().lock().unwrap();
+    Ok(model.rerank(query, documents, false, None)?)
 }
 
 /// Embed a batch of texts, returning one vector per text.

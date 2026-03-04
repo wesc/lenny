@@ -92,7 +92,7 @@ fn test_flatten_preserves_order() {
 async fn test_empty_retrieve() {
     let tmpdir = tempfile::tempdir().unwrap();
     let db_path = tmpdir.path().join("nonexistent-db");
-    let result = lenny1::contextual_indexer::retrieve(&db_path, "anything", 5, None)
+    let result = lenny1::contextual_indexer::retrieve(&db_path, "anything", 5, None, 0.01)
         .await
         .unwrap();
     assert!(result.matched_docs.is_empty());

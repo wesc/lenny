@@ -18,6 +18,7 @@ fn make_config(tmpdir: &tempfile::TempDir) -> Config {
         max_context_tokens: 4000,
         min_context_tokens: 2000,
         matrix: None,
+        min_rerank_score: 0.01,
     }
 }
 
@@ -219,6 +220,7 @@ fn no_chats_dir_returns_false() {
         max_context_tokens: 4000,
         min_context_tokens: 2000,
         matrix: None,
+        min_rerank_score: 0.01,
     };
 
     let changed = sessionize_chats::run(&config).unwrap();

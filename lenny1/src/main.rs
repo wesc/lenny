@@ -43,8 +43,12 @@ enum Command {
     },
     /// Run basic eval battery against fixture data and print results as JSON
     EvalBasic,
-    /// Run contextual indexer eval suite against chat fixture data
-    EvalContextualIndexer,
+    /// Run contextual eval suite against chat fixture data
+    EvalContextualChats,
+    /// Run contextual eval suite against text fixture data
+    EvalContextualTexts,
+    /// Run both contextual eval suites (chats + texts)
+    EvalContextualAll,
     /// Start the Matrix chat bot
     MatrixBot {
         /// Clear sync state and re-sync from scratch (keeps device identity)
@@ -99,8 +103,20 @@ async fn main() {
                 process::exit(1);
             }
         }
-        Command::EvalContextualIndexer => {
-            if let Err(e) = evals::contextual_indexer::run(&config).await {
+        Command::EvalContextualChats => {
+            if let Err(e) = evals::contextual_chats::run(&config).await {
+                eprintln!("Error: {e}");
+                process::exit(1);
+            }
+        }
+        Command::EvalContextualTexts => {
+            if let Err(e) = evals::contextual_texts::run(&config).await {
+                eprintln!("Error: {e}");
+                process::exit(1);
+            }
+        }
+        Command::EvalContextualAll => {
+            if let Err(e) = evals::contextual_all::run(&config).await {
                 eprintln!("Error: {e}");
                 process::exit(1);
             }
