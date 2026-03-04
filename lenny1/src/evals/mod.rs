@@ -212,7 +212,8 @@ pub(crate) async fn run_contextual_evals(
             eval.query,
             eval.top_k,
             eval.time_range,
-            config.min_rerank_score,
+            config.min_score_range,
+            config.score_gap_threshold,
         )
         .await
         {
@@ -223,11 +224,23 @@ pub(crate) async fn run_contextual_evals(
                     passed += 1;
                 }
                 eprintln!("{} ({:.1}s)", if pass { "PASS" } else { "FAIL" }, elapsed);
-                if !pass || !result.rerank_stats.is_empty() {
-                    if !pass {
-                        eprintln!("    reason: {reason}");
+                if !pass {
+                    eprintln!("    reason: {reason}");
+                    eprintln!(
+                        "    candidates: {} considered, {} filtered",
+                        result.candidates_considered, result.candidates_filtered
+                    );
+                    if let (Some(first), Some(last)) =
+                        (result.rerank_stats.first(), result.rerank_stats.last())
+                    {
+                        eprintln!(
+                            "    score range: {:.4} (top {:.4}, bottom {:.4})",
+                            first.score - last.score,
+                            first.score,
+                            last.score
+                        );
                     }
-                    eprintln!("    rerank stats (score | doc | enrichment):");
+                    eprintln!("    rerank stats (score | doc | content):");
                     for stat in &result.rerank_stats {
                         eprintln!(
                             "      {:.4} | {} | {}...",
@@ -262,15 +275,19 @@ pub(crate) async fn run_contextual_evals(
     let total_elapsed = run_start.elapsed().as_secs_f64();
     eprintln!("\n  [{label}] {passed}/{total} passed in {total_elapsed:.1}s");
 
-    let output = json!({
-        "suite": label,
-        "passed": passed,
-        "total": total,
-        "build_elapsed_s": (build_elapsed * 10.0).round() / 10.0,
-        "elapsed_s": (total_elapsed * 10.0).round() / 10.0,
-        "results": results,
-    });
-    println!("{}", serde_json::to_string_pretty(&output)?);
+    if passed < total {
+        let failures: Vec<_> = results.into_iter().filter(|r| !r["pass"].as_bool().unwrap_or(true)).collect();
+        let output = json!({
+            "suite": label,
+            "passed": passed,
+            "total": total,
+            "build_elapsed_s": (build_elapsed * 10.0).round() / 10.0,
+            "elapsed_s": (total_elapsed * 10.0).round() / 10.0,
+            "failures": failures,
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+        anyhow::bail!("[{label}] {}/{total} evals failed", total - passed);
+    }
 
     Ok((passed, total))
 }
@@ -433,7 +450,8 @@ fn eval_config(base_config: &Config) -> Result<(Config, tempfile::TempDir)> {
         max_context_tokens: base_config.max_context_tokens,
         min_context_tokens: base_config.min_context_tokens,
         matrix: None,
-        min_rerank_score: base_config.min_rerank_score,
+        min_score_range: base_config.min_score_range,
+        score_gap_threshold: base_config.score_gap_threshold,
     };
     Ok((config, tmpdir))
 }
@@ -489,13 +507,17 @@ pub async fn run(base_config: &Config) -> Result<()> {
     let total_elapsed = run_start.elapsed().as_secs_f64();
     eprintln!("\n  {passed}/{total} passed in {total_elapsed:.1}s");
 
-    let output = json!({
-        "passed": passed,
-        "total": total,
-        "elapsed_s": (total_elapsed * 10.0).round() / 10.0,
-        "results": results,
-    });
-    println!("{}", serde_json::to_string_pretty(&output)?);
+    if passed < total {
+        let failures: Vec<_> = results.into_iter().filter(|r| !r["pass"].as_bool().unwrap_or(true)).collect();
+        let output = json!({
+            "passed": passed,
+            "total": total,
+            "elapsed_s": (total_elapsed * 10.0).round() / 10.0,
+            "failures": failures,
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+        anyhow::bail!("{}/{total} evals failed", total - passed);
+    }
 
     Ok(())
 }

@@ -64,8 +64,10 @@ pub struct Config {
     pub min_context_tokens: usize,
     #[serde(default)]
     pub matrix: Option<MatrixConfig>,
-    #[serde(default = "default_min_rerank_score")]
-    pub min_rerank_score: f32,
+    #[serde(default = "default_min_score_range")]
+    pub min_score_range: f32,
+    #[serde(default = "default_score_gap_threshold")]
+    pub score_gap_threshold: f32,
 }
 
 fn default_model() -> String {
@@ -89,8 +91,11 @@ fn default_max_context_tokens() -> usize {
 fn default_min_context_tokens() -> usize {
     2000
 }
-fn default_min_rerank_score() -> f32 {
-    0.01
+fn default_min_score_range() -> f32 {
+    2.0
+}
+fn default_score_gap_threshold() -> f32 {
+    0.5
 }
 fn default_ollama_url() -> String {
     "http://localhost:11434".to_string()
@@ -108,7 +113,8 @@ impl Default for Config {
             max_context_tokens: default_max_context_tokens(),
             min_context_tokens: default_min_context_tokens(),
             matrix: None,
-            min_rerank_score: default_min_rerank_score(),
+            min_score_range: default_min_score_range(),
+            score_gap_threshold: default_score_gap_threshold(),
         }
     }
 }

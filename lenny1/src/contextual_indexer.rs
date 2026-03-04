@@ -226,6 +226,10 @@ pub struct RetrieveResult {
     pub context: String,
     /// Rerank scores for all candidates (sorted by score descending).
     pub rerank_stats: Vec<RerankStat>,
+    /// Total candidates after time filter (before gap filter).
+    pub candidates_considered: usize,
+    /// candidates_considered - matched_docs.len()
+    pub candidates_filtered: usize,
 }
 
 /// Retrieve relevant context for a query, optionally filtered by time range.
@@ -235,13 +239,16 @@ pub async fn retrieve(
     query: &str,
     top_k: usize,
     time_range: Option<(&str, &str)>,
-    min_rerank_score: f32,
+    min_score_range: f32,
+    score_gap_threshold: f32,
 ) -> Result<RetrieveResult> {
     if !db_path.exists() {
         return Ok(RetrieveResult {
             matched_docs: Vec::new(),
             context: String::new(),
             rerank_stats: Vec::new(),
+            candidates_considered: 0,
+            candidates_filtered: 0,
         });
     }
 
@@ -263,6 +270,8 @@ pub async fn retrieve(
                 matched_docs: Vec::new(),
                 context: String::new(),
                 rerank_stats: Vec::new(),
+                candidates_considered: 0,
+                candidates_filtered: 0,
             });
         }
 
@@ -328,11 +337,35 @@ pub async fn retrieve(
             })
             .collect();
 
-        // Filter by min score and take top_k
-        let top_indices: Vec<usize> = reranked
+        // Range gate + gap trim
+        let candidates_considered = filtered.len();
+        let score_range = if reranked.is_empty() {
+            0.0
+        } else {
+            reranked[0].score - reranked[reranked.len() - 1].score
+        };
+
+        let search_depth = reranked.len().min(top_k + 1);
+        let cutoff = if score_range < min_score_range {
+            // Tight cluster → all noise → return nothing
+            0
+        } else if reranked.len() <= top_k {
+            // Few candidates survived filtering; return all (nothing to trim)
+            reranked.len()
+        } else {
+            // Signal exists: scan for gap, else return top_k
+            let mut c = search_depth.min(top_k);
+            for i in 1..search_depth {
+                let gap = reranked[i - 1].score - reranked[i].score;
+                if gap >= score_gap_threshold {
+                    c = i;
+                    break;
+                }
+            }
+            c
+        };
+        let top_indices: Vec<usize> = reranked[..cutoff]
             .iter()
-            .filter(|r| r.score >= min_rerank_score)
-            .take(top_k)
             .map(|r| r.index)
             .collect();
 
@@ -362,10 +395,13 @@ pub async fn retrieve(
             flatten_windows(windows)
         };
 
+        let candidates_filtered = candidates_considered - matched_docs.len();
         Ok(RetrieveResult {
             matched_docs,
             context,
             rerank_stats,
+            candidates_considered,
+            candidates_filtered,
         })
     })
     .await?
