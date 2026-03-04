@@ -124,9 +124,9 @@ async fn main() {
             let prompt = prompt.join(" ");
             once::run(&config, &prompt).await
         }
-        Command::Dream { force_comprehension } => {
-            dream::run(&config, force_comprehension).await
-        }
+        Command::Dream {
+            force_comprehension,
+        } => dream::run(&config, force_comprehension).await,
         Command::Eval { suite } => match suite {
             EvalSuite::Basic => evals::run(&config).await,
             EvalSuite::ContextualChats => evals::contextual_chats::run(&config).await,

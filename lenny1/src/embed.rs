@@ -1,5 +1,8 @@
 use anyhow::Result;
-use fastembed::{EmbeddingModel, InitOptions, RerankInitOptions, RerankResult, RerankerModel, TextEmbedding, TextRerank};
+use fastembed::{
+    EmbeddingModel, InitOptions, RerankInitOptions, RerankResult, RerankerModel, TextEmbedding,
+    TextRerank,
+};
 use rusqlite::Connection;
 use std::sync::{Mutex, OnceLock};
 
@@ -27,7 +30,7 @@ fn get_reranker() -> &'static Mutex<TextRerank> {
 /// Rerank documents against a query, returning results sorted by score descending.
 pub fn rerank(query: &str, documents: &[&str]) -> Result<Vec<RerankResult>> {
     let mut model = get_reranker().lock().unwrap();
-    Ok(model.rerank(query, documents, false, None)?)
+    model.rerank(query, documents, false, None)
 }
 
 /// Embed a batch of texts, returning one vector per text.
@@ -54,12 +57,10 @@ pub fn f32_to_bytes(v: &[f32]) -> &[u8] {
 fn ensure_vec_extension() {
     use std::sync::Once;
     static INIT: Once = Once::new();
-    INIT.call_once(|| {
-        unsafe {
-            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
-                sqlite_vec::sqlite3_vec_init as *const (),
-            )));
-        }
+    INIT.call_once(|| unsafe {
+        rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+            sqlite_vec::sqlite3_vec_init as *const (),
+        )));
     });
 }
 

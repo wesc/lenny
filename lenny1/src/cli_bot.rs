@@ -33,7 +33,13 @@ pub async fn chat_loop<R: BufRead, W: Write>(
         }
 
         let ts = chrono::Utc::now().timestamp();
-        let result = once::run_prompt(config, line).await?;
+        let result = match once::run_prompt(config, line).await {
+            Ok(r) => r,
+            Err(e) => {
+                writeln!(output, "\n\x1b[38;5;245m[no response: {e}]\x1b[0m\n")?;
+                continue;
+            }
+        };
 
         lines.push(serde_json::to_string(&serde_json::json!({
             "id": uuid::Uuid::new_v4().to_string(),

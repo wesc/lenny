@@ -1,6 +1,6 @@
+pub mod contextual_all;
 pub mod contextual_chats;
 pub mod contextual_texts;
-pub mod contextual_all;
 
 use anyhow::Result;
 use regex::Regex;
@@ -276,7 +276,10 @@ pub(crate) async fn run_contextual_evals(
     eprintln!("\n  [{label}] {passed}/{total} passed in {total_elapsed:.1}s");
 
     if passed < total {
-        let failures: Vec<_> = results.into_iter().filter(|r| !r["pass"].as_bool().unwrap_or(true)).collect();
+        let failures: Vec<_> = results
+            .into_iter()
+            .filter(|r| !r["pass"].as_bool().unwrap_or(true))
+            .collect();
         let output = json!({
             "suite": label,
             "passed": passed,
@@ -508,7 +511,10 @@ pub async fn run(base_config: &Config) -> Result<()> {
     eprintln!("\n  {passed}/{total} passed in {total_elapsed:.1}s");
 
     if passed < total {
-        let failures: Vec<_> = results.into_iter().filter(|r| !r["pass"].as_bool().unwrap_or(true)).collect();
+        let failures: Vec<_> = results
+            .into_iter()
+            .filter(|r| !r["pass"].as_bool().unwrap_or(true))
+            .collect();
         let output = json!({
             "passed": passed,
             "total": total,

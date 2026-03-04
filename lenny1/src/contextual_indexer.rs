@@ -309,7 +309,9 @@ pub async fn retrieve(
         // Apply time filter in Rust
         let filtered: Vec<&Row> = if let Some((start, end)) = &time_range {
             rows.iter()
-                .filter(|r| r.timestamp.as_str() >= start.as_str() && r.timestamp.as_str() <= end.as_str())
+                .filter(|r| {
+                    r.timestamp.as_str() >= start.as_str() && r.timestamp.as_str() <= end.as_str()
+                })
                 .collect()
         } else {
             rows.iter().collect()
@@ -364,10 +366,7 @@ pub async fn retrieve(
             }
             c
         };
-        let top_indices: Vec<usize> = reranked[..cutoff]
-            .iter()
-            .map(|r| r.index)
-            .collect();
+        let top_indices: Vec<usize> = reranked[..cutoff].iter().map(|r| r.index).collect();
 
         let mut matched_docs = Vec::new();
         let mut windows: Vec<Vec<(String, String)>> = Vec::new();

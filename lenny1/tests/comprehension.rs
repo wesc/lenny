@@ -1,4 +1,6 @@
-use lenny1::actions::comprehension::{collect_dynamic_files, move_to_references, select_files_to_pop};
+use lenny1::actions::comprehension::{
+    collect_dynamic_files, move_to_references, select_files_to_pop,
+};
 use lenny1::config::{Config, ProviderConfig};
 use std::fs;
 
@@ -90,7 +92,7 @@ fn pops_oldest_files() {
 fn preserves_subdir_structure() {
     let tmpdir = tempfile::tempdir().unwrap();
     let config = make_config(&tmpdir);
-    fs::create_dir_all(&config.references_dir()).unwrap();
+    fs::create_dir_all(config.references_dir()).unwrap();
 
     // Create a file in a subdirectory
     write_dynamic_file(&config, "cli-bot/session.json", 40);
@@ -114,7 +116,7 @@ fn preserves_subdir_structure() {
 fn atomic_write_no_temp_files() {
     let tmpdir = tempfile::tempdir().unwrap();
     let config = make_config(&tmpdir);
-    fs::create_dir_all(&config.references_dir()).unwrap();
+    fs::create_dir_all(config.references_dir()).unwrap();
 
     write_dynamic_file(&config, "01-old.txt", 40);
     write_dynamic_file(&config, "02-new.txt", 40);
@@ -123,7 +125,7 @@ fn atomic_write_no_temp_files() {
     move_to_references(&config, &files).unwrap();
 
     // No temp files should remain in references/
-    let entries: Vec<String> = fs::read_dir(&config.references_dir())
+    let entries: Vec<String> = fs::read_dir(config.references_dir())
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
         .collect();

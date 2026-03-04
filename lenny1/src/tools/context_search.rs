@@ -72,12 +72,10 @@ impl Tool for ContextSearchTool {
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let time_range = match (&args.start_time, &args.end_time) {
-            (Some(start), Some(end)) => {
-                match (iso_to_unix(start), iso_to_unix(end)) {
-                    (Some(s), Some(e)) => Some((s, e)),
-                    _ => None,
-                }
-            }
+            (Some(start), Some(end)) => match (iso_to_unix(start), iso_to_unix(end)) {
+                (Some(s), Some(e)) => Some((s, e)),
+                _ => None,
+            },
             _ => None,
         };
 
