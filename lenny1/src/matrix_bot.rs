@@ -93,7 +93,7 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
     let url = Url::parse(&mc.homeserver)?;
     let host = url.host_str().unwrap_or("unknown").to_string();
 
-    let output_dir = config.references_dir().join("matrix").join(&host);
+    let output_dir = config.dynamic_dir.join("matrix").join(&host);
     let store_dir = &mc.store_path;
 
     if reset {

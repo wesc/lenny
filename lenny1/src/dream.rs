@@ -14,13 +14,6 @@ fn is_hidden_path(path: &Path) -> bool {
 }
 
 pub async fn run(config: &Config, force_comprehension: bool) -> Result<()> {
-    // Run all actions once at startup
-    eprintln!("Running initial actions...");
-    let n = actions::run_all(config)?;
-    if n > 0 {
-        eprintln!("{n} action(s) produced changes");
-    }
-
     // Run comprehension at startup
     if actions::comprehension::run(config, force_comprehension).await? {
         eprintln!("Initial comprehension completed");
@@ -63,10 +56,7 @@ pub async fn run(config: &Config, force_comprehension: bool) -> Result<()> {
                     .iter()
                     .any(|e| e.event.paths.iter().any(|p| !is_hidden_path(p)));
                 if has_relevant {
-                    eprintln!("Changes detected, running actions...");
-                    if let Err(e) = actions::run_all(config) {
-                        eprintln!("Action error: {e}");
-                    }
+                    eprintln!("Changes detected, running comprehension...");
                     if let Err(e) = actions::comprehension::run(config, false).await {
                         eprintln!("Comprehension error: {e}");
                     }
