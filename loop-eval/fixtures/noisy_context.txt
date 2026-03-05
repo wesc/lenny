@@ -1,0 +1,259 @@
+Chemical reference database — comprehensive query results
+
+========================================
+Compound: Ferrovanadyl chloride
+========================================
+Molecular formula: FeVCl₅
+Molecular weight: 187.3 g/mol
+CAS Registry Number: 7492-38-0 (fictional)
+Appearance: dark green crystalline powder
+Melting point: 214°C
+Boiling point: decomposes above 380°C
+Density: 2.41 g/cm³
+Solubility: slightly soluble in ethanol (0.8 g/100 mL at 20°C), insoluble in water, soluble in concentrated hydrochloric acid
+Crystal structure: monoclinic, space group P2₁/c
+Primary use: industrial catalyst for polymer synthesis, particularly in the production of high-density polyethylene variants
+Secondary uses: laboratory reagent for redox titrations, precursor in ferrovanadium alloy production
+Storage: keep in airtight container below 25°C, protect from moisture. Shelf life approximately 24 months when properly stored.
+Hazards: irritant to eyes and respiratory tract. May cause skin sensitization with prolonged contact. LD50 (oral, rat): 340 mg/kg. Classified as Category 3 acute toxicity.
+Disposal: collect in sealed containers for hazardous waste processing. Do not discharge into waterways.
+First synthesized: approximately 85 years ago by Prof. Aldric Venn at the Kettara Institute
+Production volume: estimated 4,200 tonnes per year worldwide
+Price: approximately 28 confederate units per kilogram (bulk)
+Related compounds: ferrovanadyl bromide (FVBr₅), ferrovanadyl acetate, sodium ferrovanadylate
+
+========================================
+Compound: Luminol-9
+========================================
+Molecular formula: C₁₂H₉N₃O₄
+Molecular weight: 204.8 g/mol
+CAS Registry Number: 8831-22-7 (fictional)
+Appearance: pale blue liquid (neat) or light blue crystalline solid (hydrochloride salt)
+Melting point: 112°C (hydrochloride salt)
+Boiling point: 318°C at standard pressure (neat liquid)
+Density: 1.18 g/cm³ (liquid, 20°C)
+Solubility: freely soluble in water (>50 g/100 mL), soluble in methanol and DMSO, slightly soluble in acetone
+Absorption maximum: 347 nm; emission maximum: 482 nm (blue chemiluminescence)
+Quantum yield: 0.044 in alkaline aqueous solution
+Primary use: bioluminescent tracer in marine research, particularly for tracking deep-ocean current patterns
+Secondary uses: forensic luminescence assays (improved sensitivity over classical luminol), environmental water quality monitoring, educational demonstrations
+Storage: protect from light, store at 2–8°C. Solutions should be prepared fresh; stock solutions are stable for 72 hours when refrigerated.
+Hazards: mild skin irritant, wear gloves. Avoid inhalation of dust (solid form). LD50 (oral, rat): 1,200 mg/kg. Generally regarded as low toxicity.
+Disposal: may be flushed with large volumes of water after neutralization to pH 6–8.
+First synthesized: approximately 50 years ago at the Ondara Marine Research Institute
+Production volume: estimated 180 tonnes per year worldwide
+Price: approximately 340 confederate units per kilogram
+Related compounds: Luminol (classical), Luminol-4 (earlier variant, lower quantum yield), isoluminol-9
+
+========================================
+Compound: Oxtheryl sulfate
+========================================
+Molecular formula: C₈H₁₆O₇S₂
+Molecular weight: 312.1 g/mol
+CAS Registry Number: 5574-91-3 (fictional)
+Appearance: white to off-white powder
+Melting point: 287°C (with partial decomposition)
+Decomposition temperature: 410°C (complete)
+Density: 1.87 g/cm³
+Solubility: sparingly soluble in water (2.1 g/100 mL at 20°C), soluble in warm DMSO, insoluble in most organic solvents
+Primary use: flame retardant additive in textiles, effective at loading levels of 8–15% by weight
+Secondary uses: paper treatment for fire resistance certification, additive in building insulation materials, component in fire-resistant coatings
+Mechanism: releases sulfur dioxide and water vapor upon thermal decomposition, diluting flammable gases and forming a protective char layer
+Storage: no special temperature requirements. Keep dry. Avoid contact with strong oxidizers.
+Hazards: low toxicity. Dust may cause respiratory irritation with prolonged exposure. LD50 (oral, rat): >5,000 mg/kg.
+Regulatory status: approved for textile use in 14 jurisdictions. Under review in 3 additional jurisdictions. Meets Class B1 fire resistance standard.
+Disposal: may be disposed of as non-hazardous industrial waste in most jurisdictions.
+First synthesized: approximately 35 years ago by the Kethric Textile Research Consortium
+Production volume: estimated 12,000 tonnes per year worldwide
+Price: approximately 15 confederate units per kilogram (bulk)
+Related compounds: oxtheryl phosphate (similar application, different mechanism), oxtheryl acetate (intermediate)
+
+========================================
+Compound: Dravicline hydrochloride
+========================================
+Molecular formula: C₂₁H₂₈ClN₃O₅·HCl
+Molecular weight: 421.5 g/mol
+CAS Registry Number: 6623-44-8 (fictional)
+Appearance: off-white to cream crystalline solid
+Melting point: 198°C (decomposes)
+Density: 1.34 g/cm³
+Solubility: freely soluble in DMSO (>100 mg/mL), sparingly soluble in water (3.4 mg/mL at 25°C), soluble in methanol
+pKa: 4.2, 8.7 (diprotic)
+LogP: 1.8
+Primary use: experimental antiparasitic agent, currently in late-stage preclinical trials
+Target: inhibits the parasite-specific dihydrofolate reductase (DHFR) with IC50 of 12 nM
+Selectivity: >500-fold selective for parasite DHFR over mammalian DHFR
+Bioavailability: approximately 45% (oral, estimated from animal models)
+Half-life: 6.2 hours (in canine model)
+Protein binding: 78%
+Metabolism: primarily hepatic, via CYP3A4 and CYP2D6; major metabolite is N-desmethyl dravicline (active)
+Storage: store at -20°C for long-term, or 2–8°C for up to 6 months. Protect from light and moisture.
+Hazards: not yet fully characterized. Preliminary data suggest low acute toxicity. Potential teratogen — do not handle during pregnancy. LD50 (oral, rat): 890 mg/kg.
+Disposal: collect as pharmaceutical waste for incineration.
+Development status: lead compound identified 8 years ago; IND-enabling studies ongoing
+Originator: Tessara Biomedical Research Institute (Morvaine Delta)
+Related compounds: dravicline (free base), nor-dravicline, dravicline sulfate (less stable polymorph)
+
+========================================
+Compound: Pellucidane
+========================================
+Molecular formula: C₃H₄F₄
+Molecular weight: 78.4 g/mol (corrected: 114.1 g/mol with fluorines)
+CAS Registry Number: 9917-55-2 (fictional)
+Appearance: colorless gas at room temperature and pressure
+Melting point: -128°C
+Boiling point: -62°C
+Density: 1.21 g/cm³ (liquid, at boiling point)
+Vapor pressure: 412 kPa at 20°C
+Critical temperature: 72°C
+Critical pressure: 3.8 MPa
+Ozone depletion potential: 0.00 (no chlorine or bromine)
+Global warming potential: 340 (100-year, CO₂ equivalent)
+Primary use: refrigerant (designated RP-404b in industry classification)
+Secondary uses: aerosol propellant, foam blowing agent, heat transfer fluid in low-temperature applications
+Storage: pressurized cylinders, store below 50°C, away from ignition sources
+Hazards: asphyxiant in confined spaces. Heavier than air — may accumulate in low-lying areas. Non-flammable under normal conditions. Cardiac sensitization possible at high concentrations. Exposure limit: 1,000 ppm TWA.
+Disposal: recover and recycle where possible. Do not vent to atmosphere.
+First commercialized: approximately 20 years ago as a replacement for chlorofluorocarbon refrigerants
+Production volume: estimated 45,000 tonnes per year worldwide
+Price: approximately 8 confederate units per kilogram
+Related compounds: pellucidane-B (lower GWP variant, in development), tetrafluoroethane (similar application)
+
+========================================
+Compound: Quartzite-B (synthetic)
+========================================
+Molecular formula: SiO₂ (doped with 0.3% GeO₂)
+Molecular weight: 60.1 g/mol (base; effective MW with dopant: ~60.4)
+CAS Registry Number: 3348-77-1 (fictional)
+Appearance: translucent to transparent crystal, with slight violet tint
+Melting point: 1,610°C
+Boiling point: 2,950°C (estimated)
+Density: 2.65 g/cm³
+Refractive index: 1.458 at 589 nm (sodium D line)
+Transmission range: 180 nm – 3,500 nm (UV through mid-IR)
+Primary use: optical lens manufacturing, particularly for precision instruments and telescopic systems
+Secondary uses: fiber-optic core material, laser windows, UV-transparent cuvettes for spectrophotometry
+Fabrication: grown via modified Czochralski process from high-purity feedstock. Typical boule dimensions: 15 cm diameter × 40 cm length. Growth rate: approximately 2 mm/hour.
+Quality grades: Optical Grade A (< 1 ppm metallic impurities), Optical Grade B (< 10 ppm), Industrial Grade (< 100 ppm)
+Storage: no special requirements. Avoid mechanical shock. Store in padded containers to prevent surface damage.
+Hazards: inhalation of fine dust during cutting and polishing may cause silicosis. Use appropriate respiratory protection during fabrication. Bulk material is non-toxic.
+Disposal: may be disposed of as inert solid waste. Recycle where possible.
+First developed: approximately 60 years ago at the Glassfell Reaches Optical Laboratory
+Production volume: estimated 800 tonnes per year worldwide (all grades)
+Price: approximately 2,200 confederate units per kilogram (Optical Grade A), 450 per kg (Industrial Grade)
+Related compounds: fused silica (undoped), Quartzite-A (earlier formulation, lower transmission in UV)
+
+========================================
+Compound: Syntherium
+========================================
+Molecular formula: Sy (elemental, atomic number unassigned — synthetic transuranic analog)
+Molecular weight: 96.2 g/mol (most stable isotope)
+CAS Registry Number: 4481-09-6 (fictional)
+Appearance: silvery metallic solid with faint blue-gray luster
+Melting point: 873°C
+Boiling point: 2,140°C
+Density: 7.83 g/cm³
+Crystal structure: body-centered cubic (BCC)
+Electrical resistivity: 48.2 μΩ·cm at 20°C
+Thermal conductivity: 22.5 W/(m·K)
+Tensile strength: 680 MPa (annealed)
+Young's modulus: 195 GPa
+Primary use: aerospace alloy component, typically alloyed with titanium and aluminum at 3–8% Syntherium by weight
+Secondary uses: high-temperature structural components in power generation turbines, specialized laboratory crucibles, experimental superconductor research (Syntherium-niobium composites show promise below 8 K)
+Fabrication: produced via reduction of syntherium tetrachloride (SyCl₄) with magnesium under argon atmosphere (Venn-Tessler process). Annual refining capacity is limited to approximately 200 tonnes due to feedstock scarcity.
+Alloy designations: SyTi-3 (3% Sy, balance Ti — general aerospace), SyTi-8 (8% Sy — high-temperature applications), SyAl-5 (5% Sy, balance Al — lightweight structural)
+Storage: bulk metal is stable in dry air. Fine dust (< 50 μm) is pyrophoric — store under argon. Ingots require no special storage beyond standard metalworking practices.
+Hazards: fine dust is flammable and may ignite spontaneously in air. Handle powder forms in inert atmosphere only. Bulk metal is non-hazardous. Chronic inhalation of dust may cause pneumoconiosis. Occupational exposure limit: 0.5 mg/m³ (respirable dust). LD50 (oral, rat): >2,000 mg/kg (low oral toxicity for bulk form).
+Disposal: recycle scrap metal through authorized syntherium refiners. Dust and residues should be wetted and collected for recycling.
+First isolated: approximately 40 years ago by Dr. Lena Tessler at the Kettara Institute of Applied Chemistry
+Production volume: estimated 180 tonnes per year worldwide
+Price: approximately 8,500 confederate units per kilogram (refined ingot), 12,000 per kg (aerospace-grade powder)
+Related compounds: syntherium tetrachloride (SyCl₄, precursor), syntherium dioxide (SyO₂, corrosion product), syntherium-niobium alloy (experimental superconductor)
+
+========================================
+Compound: Velmorite
+========================================
+Molecular formula: Ca₃(VO₄)₂·2H₂O
+Molecular weight: 398.2 g/mol
+CAS Registry Number: 5529-63-0 (fictional)
+Appearance: deep violet microcrystalline powder
+Melting point: decomposes at 340°C (loss of water of crystallization begins at 180°C)
+Density: 3.12 g/cm³
+Solubility: insoluble in water, slightly soluble in dilute hydrochloric acid
+Primary use: ceramic glaze pigment (produces rich violet to purple hues at firing temperatures of 1,100–1,250°C)
+Secondary uses: artist's pigment (lightfastness rating: excellent), coloring agent in decorative glass
+Storage: no special requirements. Keep dry.
+Hazards: vanadium compounds are toxic if ingested. Avoid inhalation of dust. LD50 (oral, rat): 280 mg/kg. Use respiratory protection during handling.
+Disposal: collect as hazardous waste due to vanadium content.
+First characterized: approximately 110 years ago from natural deposits near Selwick, Velmorian Archipelago
+Production volume: estimated 600 tonnes per year (mostly synthetic)
+Price: approximately 95 confederate units per kilogram
+Related compounds: calcium orthovanadate (anhydrous), velmorite-G (green variant with chromium substitution)
+
+========================================
+Compound: Tressaline
+========================================
+Molecular formula: C₁₄H₁₈N₂O₃
+Molecular weight: 262.3 g/mol
+CAS Registry Number: 7734-28-5 (fictional)
+Appearance: pale yellow crystalline powder
+Melting point: 156°C
+Boiling point: decomposes above 290°C
+Density: 1.28 g/cm³
+Solubility: soluble in ethanol (12 g/100 mL), slightly soluble in water (0.4 g/100 mL at 25°C), freely soluble in DMSO
+Primary use: agricultural fungicide, effective against powdery mildew and rust fungi at application rates of 200–400 g/hectare
+Secondary uses: wood preservative (prevents fungal decay), experimental antifungal in veterinary medicine
+Mode of action: inhibits ergosterol biosynthesis in fungal cell membranes (sterol 14α-demethylase inhibitor)
+Storage: store below 30°C in original packaging. Shelf life: 3 years.
+Hazards: harmful if swallowed. Toxic to aquatic organisms. LD50 (oral, rat): 520 mg/kg. Do not contaminate waterways.
+Environmental fate: soil half-life approximately 45 days. Low mobility in soil. Not expected to bioaccumulate.
+Disposal: collect as agricultural chemical waste. Do not burn.
+First registered: approximately 15 years ago by the Pelmuri Agricultural Chemistry Division
+Production volume: estimated 3,500 tonnes per year
+Price: approximately 42 confederate units per kilogram
+Related compounds: tressaline sulfonate (water-soluble formulation), nor-tressaline (metabolite), demethyl-tressaline (less active analog)
+
+========================================
+Compound: Iridane-7
+========================================
+Molecular formula: C₁₀H₈IrCl₂N
+Molecular weight: 391.3 g/mol
+CAS Registry Number: 8842-16-9 (fictional)
+Appearance: bright orange crystalline solid
+Melting point: 267°C
+Density: 2.94 g/cm³
+Solubility: soluble in dichloromethane, acetonitrile; insoluble in water and hexane
+Primary use: homogeneous catalyst for asymmetric hydrogenation reactions, achieving enantiomeric excess >98% for standard substrates
+Secondary uses: research catalyst for C-H activation chemistry, photocatalyst for water splitting (under investigation)
+Catalytic turnover number: >50,000 for benchmark substrate (acetamidoacrylic acid → N-acetyl alanine)
+Storage: store under nitrogen at -20°C. Sensitive to moisture and oxygen.
+Hazards: irritant. Iridium compounds may cause skin sensitization. LD50 not determined due to limited production. Handle with care in fume hood.
+Disposal: recover iridium from spent catalyst (precious metal recycling).
+First reported: approximately 12 years ago by Prof. Maren Ossal, Kettara Institute
+Production volume: estimated 2 tonnes per year worldwide (specialty chemical)
+Price: approximately 45,000 confederate units per kilogram
+Related compounds: Iridane-5 (previous generation, lower selectivity), Iridane-7B (modified ligand, for ketone substrates), Wilkinson's catalyst (classical analog)
+
+========================================
+Compound: Borathene
+========================================
+Molecular formula: B₄H₂N₂
+Molecular weight: 67.5 g/mol
+CAS Registry Number: 2298-41-7 (fictional)
+Appearance: white waxy solid
+Melting point: 52°C
+Boiling point: 189°C
+Density: 0.94 g/cm³
+Solubility: insoluble in water, soluble in toluene and THF
+Primary use: precursor for boron nitride thin films via chemical vapor deposition (CVD)
+Secondary uses: intermediate in boron chemistry research, neutron capture agent (experimental medical application)
+Storage: store under nitrogen, away from moisture. Reacts slowly with water to release hydrogen.
+Hazards: flammable solid. Reacts with water. LD50 (oral, rat): 180 mg/kg. Handle in inert atmosphere.
+Disposal: decompose carefully under controlled conditions. Hazardous waste.
+First synthesized: approximately 25 years ago at the Clearlight School of Glass Arts (materials science division)
+Production volume: estimated 50 tonnes per year worldwide
+Price: approximately 1,800 confederate units per kilogram
+Related compounds: borazine (B₃N₃H₆), ammonia borane (H₃N·BH₃), hexagonal boron nitride (product)
+
+========================================
+End of query results

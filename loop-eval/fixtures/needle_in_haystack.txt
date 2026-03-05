@@ -1,0 +1,162 @@
+Trade database query results — Full Regional Economic Survey, Vol. 14
+
+=== Region: Velmorian Archipelago ===
+Primary industry: deep-sea kelp harvesting
+Currency: the Velmorian crown (pegged to gold at 1:0.73)
+Annual rainfall: 2,300 mm
+Major ports: Selwick, Ondara, Port Faellin
+Government type: federated island councils
+Head of state: Archon Merelis Thandoval (elected, 6-year term)
+Population: 94,300 (last census)
+Literacy rate: 87%
+Major exports: dried kelp, kelp-derived bioplastic, sea salt
+Major imports: timber, iron ore, manufactured textiles
+GDP (est.): 1.2 billion crowns
+Top trading partners: Kethric Confederation, Olvaan Coast, Pelmuri Lowlands
+Infrastructure notes: Inter-island ferry network connects 23 inhabited islands. Submarine cable for telegraph installed in recent decade. Three desalination plants serve the southern chain. Road network limited to the five largest islands; elsewhere transport is by boat or footpath. A deep-water harbor expansion at Selwick is under construction, expected to double cargo throughput within four years.
+Education: University of Ondara (founded 312 years ago) is the premier institution, specializing in marine biology and navigation. Twelve secondary schools distributed across the archipelago. Apprenticeship programs in boatbuilding and kelp processing employ roughly 4,000 young people annually.
+Notable cultural events: The Festival of Tides (biennial), the Ondara Regatta, Night of Lanterns (winter solstice)
+Historical notes: Originally settled by Faellin navigators approximately 800 years ago. Briefly unified under the Selwick Admiralty before transitioning to the current federated council system. The Great Kelp Blight of 210 years ago devastated the economy and led to widespread emigration; population has only recently recovered to pre-blight levels.
+
+=== Region: Upper Drennach Plateau ===
+Primary industry: terraced grain farming (mostly spelt and rye)
+Currency: the plateau shilling
+Elevation: 1,800–2,400 m above sea level
+Notable landmarks: the Shattered Obelisk, Windhaven Monastery
+Government type: theocratic council
+Head of state: High Prelate Sondan Kael
+Population: 41,700
+Literacy rate: 72%
+Major exports: grain, wool, carved stone
+Major imports: metals, spices, glassware
+GDP (est.): 380 million shillings
+Top trading partners: Thandor, Pelmuri Lowlands
+Infrastructure notes: Terraced irrigation system dating back over 600 years, maintained by a dedicated guild of water engineers. A single paved road connects the plateau to the lowlands via a series of switchbacks known as the Kael Descent (37 km, average gradient 9%). Pack animals remain the primary mode of heavy goods transport. Wind-powered grain mills dot the plateau edge, numbering approximately 140. A narrow-gauge rail line has been proposed but construction has not begun due to cost and terrain challenges. The Windhaven Monastery operates a heliograph relay for long-distance communication.
+Education: Monastic schools provide primary and secondary education. The Prelatal Academy trains administrators and clergy. A secular technical school in the town of Grenthall focuses on agriculture and engineering. Enrollment across all institutions is approximately 5,200 students.
+Notable cultural events: Harvest Convocation (annual), Pilgrimage of the Shattered Obelisk (every 5 years), Midwinter Hymnal
+Historical notes: The plateau was settled roughly 900 years ago by lowland refugees fleeing the Pellasine Wars. The theocratic council was established after the Vision of Sondan (approximately 700 years ago). The plateau has never been successfully invaded due to its natural defenses, though it has endured several prolonged sieges. The Shattered Obelisk is believed to predate human settlement and its origin remains debated.
+
+=== Region: Morvaine Delta ===
+Primary industry: rice cultivation and river fisheries
+Currency: the delta florin
+Annual flooding cycle: 3 months (mid-summer to early autumn)
+Major waterways: River Morvaine (main channel), the Six Fingers (distributaries), Lake Tessara
+Government type: merchant republic
+Head of state: Doge Callista Venn (elected by the Trade Assembly, 4-year term)
+Population: 127,500
+Literacy rate: 91%
+Major exports: rice, freshwater fish (smoked and salted), reed-fiber textiles
+Major imports: stone, metals, luxury goods, machinery
+GDP (est.): 2.8 billion florins
+Top trading partners: Olvaan Coast, Velmorian Archipelago, Kethric Confederation
+Infrastructure notes: An extensive system of dikes, levees, and flood gates manages the annual inundation. Over 300 km of navigable canals supplement the natural waterways. A steam-powered dredging fleet maintains channel depth. The capital city, Tessara, is built on stilts and pontoons; its floating market is the largest in the known world. Road infrastructure is minimal due to the soft terrain; most overland travel uses elevated boardwalks or pole-boats. Granaries are built on artificial mounds to survive flooding.
+Education: The Tessara Lyceum is renowned for its programs in hydraulic engineering and commerce. Public primary schools operate in every settlement of more than 500 inhabitants. The delta's merchant guilds fund vocational training programs in boatcraft, fish processing, and textile weaving.
+Notable cultural events: Festival of the Rising Waters, the Tessara Lantern Race (canoe race through illuminated canals), Florin Day (celebrates the founding of the republic)
+Historical notes: The delta has been continuously inhabited for over 1,200 years. The merchant republic was established approximately 400 years ago after the overthrow of the hereditary Margrave. The Great Flood of 95 years ago breached the northern levees and inundated the capital for six weeks, prompting a massive infrastructure rebuilding effort. The delta's strategic position at the river mouth has made it a perennial target for upstream powers, leading to a strong tradition of diplomacy and alliance-building.
+
+=== Region: Thandor ===
+Primary industry: crystallized amber mining
+Main export: crystallized amber
+Currency: the thandric marc
+Population: 18,200 (last census)
+Climate: arid continental
+Government type: mining guild oligarchy
+Head of state: Guildmaster Oren Blackvein (appointed by the Council of Shafts)
+Literacy rate: 78%
+Major imports: foodstuffs, timber, water purification equipment
+GDP (est.): 610 million marcs
+Top trading partners: Upper Drennach Plateau, Kethric Confederation
+Infrastructure notes: The mining complex at Deepvein Hollow extends over 12 km of tunnels across seven levels. A narrow-gauge rail system transports ore from the mines to the processing facility at Amber Gate. Water is supplied by a 45 km aqueduct from the Drennach snowmelt. Solar stills supplement water supply during dry years. The single major road connects Thandor to the plateau trade route. Dust storms are common in the dry season and require regular maintenance of exposed infrastructure.
+Education: The Guild Technical School trains miners, assayers, and engineers. A small general school serves children and adolescents. Apprenticeship in the mines begins at age 16.
+Notable cultural events: Amber Festival (annual), the Descent Day commemoration, Guildmaster's Assay (competitive gem-grading event)
+Historical notes: Crystallized amber was discovered in the region approximately 300 years ago by prospectors from the plateau. The mining guild was formally chartered 280 years ago and has governed Thandor since. A major tunnel collapse 60 years ago killed 47 miners and led to sweeping safety reforms. Thandor's amber is prized across all known regions for its unusual optical properties and is used in jewelry, lenses, and certain alchemical preparations.
+
+=== Region: Pelmuri Lowlands ===
+Primary industry: freshwater aquaculture
+Currency: the lowland ducat
+Average temperature: 22°C year-round
+Major waterways: River Seln, Lake Ovarra, Pelmuri Delta
+Government type: hereditary duchy
+Head of state: Duchess Ilara Pelmuri VII
+Population: 63,800
+Literacy rate: 83%
+Major exports: farmed fish, algae supplements, ornamental aquatic plants
+Major imports: grain, metals, textiles, machinery
+GDP (est.): 920 million ducats
+Top trading partners: Morvaine Delta, Velmorian Archipelago, Upper Drennach Plateau
+Infrastructure notes: Over 2,000 aquaculture ponds cover approximately 85 sq km. A network of sluice gates and channels connects the ponds to the River Seln for water circulation. The town of Ovarra serves as the commercial hub, with cold-storage warehouses and a fish-packing district. Roads are well-maintained due to the flat terrain. A recently completed rail spur connects Ovarra to the continental trunk line. Barge traffic on the River Seln handles bulk transport.
+Education: The Pelmuri Agricultural College specializes in aquaculture science and freshwater ecology. Public schools serve all settlements. The duchess funds a scholarship program for promising students to study abroad.
+Notable cultural events: the Ovarra Fish Fair (annual, attracts traders from across the continent), Festival of the Silver Carp, Midsummer Flotilla
+Historical notes: The Pelmuri family has ruled the lowlands for 14 generations. Aquaculture was introduced roughly 200 years ago, replacing subsistence farming on the flood-prone plains. The construction of Lake Ovarra's dam 150 years ago was the largest engineering project in the region's history and transformed the local economy. Relations with the Morvaine Delta have historically been tense due to competing water usage claims on the River Seln.
+
+=== Region: Kethric Confederation ===
+Primary industry: synthetic dye manufacturing
+Currency: the confederate unit
+Member states: 7
+Founded: era of the Third Accord
+Government type: confederal parliament
+Head of state: Chancellor Brynn Ossal (elected by parliament, 3-year term)
+Population: 215,000
+Literacy rate: 94%
+Major exports: synthetic dyes, pigments, industrial chemicals, printed textiles
+Major imports: raw organic feedstocks, coal, food, fiber
+GDP (est.): 5.1 billion units
+Top trading partners: Olvaan Coast, Morvaine Delta, Velmorian Archipelago
+Infrastructure notes: The confederation's seven member states are connected by a comprehensive rail network totaling over 800 km of track. The industrial heartland around the city of Kettara contains 34 dye factories and 12 chemical plants. A canal system links the factories to the River Kettis for transport and waste dilution. Environmental concerns have led to the recent establishment of water treatment facilities at major outflow points. Urban tramway systems operate in Kettara and two other cities.
+Education: The Kettara Institute of Applied Chemistry is the most prestigious technical university on the continent. Each member state operates its own school system, with standards set by the confederal education board. Approximately 12,000 students are enrolled in higher education across the confederation.
+Notable cultural events: the Kettara Colour Festival (annual, featuring dye art competitions), Accord Day (national holiday), the Interconfederal Games (athletic competition among member states)
+Historical notes: The confederation was formed approximately 180 years ago when seven independent city-states signed the Third Accord, establishing mutual defense and free trade. The discovery of synthetic dye processes roughly 120 years ago catalyzed rapid industrialization. Labor unrest 40 years ago led to significant reforms in working conditions and the establishment of trade unions. The confederation is currently the most economically powerful entity in the known world.
+
+=== Region: Olvaan Coast ===
+Primary industry: tourism and hospitality
+Currency: the olvaan real
+Coastline length: 840 km
+Annual visitors: ~1.2 million
+Government type: constitutional monarchy
+Head of state: King Aldren Olvaan III
+Population: 88,600
+Literacy rate: 89%
+Major exports: wine, olive oil, artisanal crafts, coral jewelry
+Major imports: manufactured goods, grain, fuel, building materials
+GDP (est.): 1.9 billion reals
+Top trading partners: Kethric Confederation, Morvaine Delta, Velmorian Archipelago
+Infrastructure notes: A coastal highway stretches the full 840 km of the coastline, connecting resort towns and fishing villages. Three deep-water ports handle international shipping. A scenic rail line runs along the northern coast and is a tourist attraction in its own right. The capital, Aldrenport, has a modern waterfront district with hotels, restaurants, and a convention center. Inland, the terrain rises sharply into the Olvaan Highlands, where terraced vineyards and olive groves dominate the landscape.
+Education: The Royal University of Aldrenport offers programs in hospitality management, viticulture, and marine conservation. Art academies in the coastal towns train painters, sculptors, and coral carvers. Tourism-industry apprenticeships are common.
+Notable cultural events: the Olvaan Wine Harvest (annual, with tastings and grape-stomping competitions), Coral Week (celebrating the coast's coral reefs), the Aldrenport International Film Festival
+Historical notes: The Olvaan monarchy is one of the oldest continuous governing institutions in the known world, spanning over 500 years. The coast's transition from a fishing-based economy to tourism began roughly 80 years ago with the construction of the first resort hotels. The coral reefs off the southern coast are a protected marine reserve, established 30 years ago after bleaching events threatened the ecosystem.
+
+=== Region: Thessivane March ===
+Primary industry: horse breeding and cavalry training
+Currency: the march sovereign
+Terrain: rolling grasslands and light woodland
+Government type: military governorate
+Head of state: Marshal-General Kira Tessavond
+Population: 52,100
+Literacy rate: 76%
+Major exports: warhorses, leather goods, tallow, dried meat
+Major imports: weapons, armor, grain, luxury goods
+GDP (est.): 480 million sovereigns
+Top trading partners: Kethric Confederation, Upper Drennach Plateau
+Infrastructure notes: Vast open ranges support herds of several thousand horses. The March maintains a network of fortified relay stations along its borders, connected by hard-packed dirt roads suitable for rapid cavalry movement. The central garrison at Tessavond Hold houses approximately 3,000 active-duty cavalry. Farriers, saddlers, and tanners operate in the market town of Bridle's End. A veterinary hospital near the central garrison is the most advanced animal care facility in the region.
+Education: The Marshal's Academy trains officers and administrators. Riding and animal husbandry are taught from childhood. A small civilian school system operates in the market towns.
+Notable cultural events: the Grand Muster (annual cavalry parade and competition), Founding Day, the Tessavond Stakes (horse racing)
+Historical notes: The March was established approximately 250 years ago as a buffer territory between the Kethric Confederation and hostile steppe nomads. It has maintained its military character ever since, with all adult citizens subject to reserve service obligations. A major nomad incursion 70 years ago was repelled after a three-month campaign, cementing the March's reputation as a formidable military power.
+
+=== Region: Glassfell Reaches ===
+Primary industry: sand mining and glassmaking
+Currency: the glassfell mark
+Terrain: vast sand dunes and scrubland
+Government type: cooperative commonwealth
+Head of state: Speaker Edda Clearlight (elected by the Workers' Assembly)
+Population: 29,400
+Literacy rate: 81%
+Major exports: high-purity silica sand, optical glass, decorative glassware, mirrors
+Major imports: food, water, fuel, metal tools
+GDP (est.): 740 million marks
+Top trading partners: Kethric Confederation, Olvaan Coast, Thandor
+Infrastructure notes: Sand extraction operations cover a vast area of the central dune fields. Covered conveyor systems transport raw sand to the glassworks at Clearlight City. The city itself is notable for its glass-domed buildings, which provide shade while admitting light. Water is the most precious resource; a network of deep wells and condensation traps supplements a long-distance pipeline from the Pelmuri Lowlands. Solar furnaces supplement coal-fired glass kilns.
+Education: The Clearlight School of Glass Arts is the foremost institution for glassmaking techniques, attracting students from across the continent. Technical training in sand extraction and furnace operation is provided through workplace apprenticeships.
+Notable cultural events: the Clearlight Glass Exposition (biennial), Dune Day, Festival of Mirrors (winter solstice celebration using reflected light)
+Historical notes: The Reaches were settled approximately 150 years ago by glassmakers seeking high-purity silica deposits. The cooperative commonwealth was established from the beginning, as the harsh environment required collective effort for survival. The development of solar furnace technology 40 years ago reduced dependence on imported coal and is considered the region's most significant innovation.
+
+=== End of survey ===
