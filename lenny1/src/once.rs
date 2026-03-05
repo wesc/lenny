@@ -60,6 +60,12 @@ async fn run_with_client<C: CompletionClient>(
 
     let full_preamble = format!("{preamble}\n\n{OUTPUT_INSTRUCTIONS}");
 
+    let prompt_log_path = config
+        .dynamic_dir
+        .parent()
+        .unwrap_or(&config.dynamic_dir)
+        .join("prompt-log.txt");
+
     let mut builder = client
         .agent(model)
         .preamble(&full_preamble)
@@ -78,6 +84,8 @@ async fn run_with_client<C: CompletionClient>(
 
     let hook = AgentHook {
         state: state.clone(),
+        prompt_log_path: Some(prompt_log_path),
+        preamble: Some(full_preamble.clone()),
     };
     let output: AgentOutput = agent.prompt_typed(user_prompt).with_hook(hook).await?;
 

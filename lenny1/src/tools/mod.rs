@@ -12,7 +12,9 @@ pub use web_scrape::WebScrapeTool;
 
 use rig::agent::{HookAction, PromptHook};
 use rig::completion::CompletionModel;
+use rig::message::Message;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 // ---- Structured output ----
@@ -66,14 +68,60 @@ fn now() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 
+/// Format a message's content field for the prompt log.
+/// If it's a string, print it directly. Otherwise print as JSON.
+fn format_content(content: &serde_json::Value, out: &mut String) {
+    match content {
+        serde_json::Value::String(s) => out.push_str(s),
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                    out.push_str(text);
+                } else if let Ok(json) = serde_json::to_string_pretty(item) {
+                    out.push_str(&json);
+                }
+                out.push('\n');
+            }
+        }
+        other => {
+            if let Ok(json) = serde_json::to_string_pretty(other) {
+                out.push_str(&json);
+            }
+        }
+    }
+}
+
 // ---- AgentHook: captures tool events ----
 
 #[derive(Clone)]
 pub struct AgentHook {
     pub state: Arc<Mutex<AgentState>>,
+    pub prompt_log_path: Option<PathBuf>,
+    pub preamble: Option<String>,
 }
 
 impl<M: CompletionModel> PromptHook<M> for AgentHook {
+    async fn on_completion_call(&self, prompt: &Message, history: &[Message]) -> HookAction {
+        if let Some(path) = &self.prompt_log_path {
+            let mut out = String::new();
+            if let Some(preamble) = &self.preamble {
+                out.push_str("[SYSTEM]\n");
+                out.push_str(preamble);
+                out.push_str("\n\n");
+            }
+            for msg in history.iter().chain(std::iter::once(prompt)) {
+                if let Ok(v) = serde_json::to_value(msg) {
+                    let role = v["role"].as_str().unwrap_or("unknown").to_uppercase();
+                    out.push_str(&format!("[{role}]\n"));
+                    format_content(&v["content"], &mut out);
+                    out.push_str("\n\n");
+                }
+            }
+            let _ = std::fs::write(path, out.trim_end());
+        }
+        HookAction::cont()
+    }
+
     async fn on_tool_call(
         &self,
         tool_name: &str,

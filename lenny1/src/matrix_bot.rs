@@ -265,14 +265,19 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
 
                 eprintln!("Responding in {room_name} to {sender}: {body}");
 
-                match once::run_prompt(&config, &body).await {
+                let display = sender_name.as_deref().unwrap_or(&sender);
+                let prompt =
+                    format!("[room: {room_name} ({room_id})] {display} ({sender}): {body}");
+
+                match once::run_prompt(&config, &prompt).await {
                     Ok(result) if !result.skipped => {
                         let mut content = RoomMessageEventContent::text_plain(&result.answer);
                         if let Some(thread_root) = thread_root {
-                            // Reply within the existing thread
-                            let mut thread = Thread::plain(thread_root, reply_to_event_id);
-                            thread.is_falling_back = false;
-                            content.relates_to = Some(Relation::Thread(thread));
+                            // Post to the thread (not a reply to a specific message)
+                            content.relates_to = Some(Relation::Thread(Thread::plain(
+                                thread_root,
+                                reply_to_event_id,
+                            )));
                         }
                         let t0 = std::time::Instant::now();
                         if let Err(e) = room.send(content).await {
