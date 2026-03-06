@@ -1,4 +1,5 @@
 pub mod actions;
+pub mod agent;
 pub mod cli_bot;
 pub mod config;
 pub mod context;

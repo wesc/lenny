@@ -1,47 +1,26 @@
-use rig::completion::ToolDefinition;
-use rig::tool::Tool;
+use anyhow::Result;
+use async_trait::async_trait;
+use openrouter_rs::types::Tool;
 use serde::Deserialize;
 use serde_json::json;
-use thiserror::Error;
+
+use crate::agent::{ToolDef, ToolHandler};
 
 #[derive(Debug, Deserialize)]
-pub struct RandomNumberArgs {
-    pub min: i64,
-    pub max: i64,
+struct RandomNumberArgs {
+    min: i64,
+    max: i64,
 }
-
-#[derive(Debug, Error)]
-#[error("RandomNumber error: {0}")]
-pub struct RandomNumberError(String);
 
 pub struct RandomNumberTool;
 
-impl Tool for RandomNumberTool {
-    const NAME: &'static str = "random_number";
-
-    type Error = RandomNumberError;
-    type Args = RandomNumberArgs;
-    type Output = i64;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: "random_number".to_string(),
-            description: "Generate a random integer between min and max (inclusive).".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "min": { "type": "integer", "description": "Minimum value (inclusive)" },
-                    "max": { "type": "integer", "description": "Maximum value (inclusive)" }
-                },
-                "required": ["min", "max"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+#[async_trait]
+impl ToolHandler for RandomNumberTool {
+    async fn call(&self, args: &serde_json::Value) -> Result<String> {
         use rand::Rng;
+        let args: RandomNumberArgs = serde_json::from_value(args.clone())?;
         if args.min > args.max {
-            return Err(RandomNumberError("min must be <= max".to_string()));
+            anyhow::bail!("min must be <= max");
         }
         let n = rand::rng().random_range(args.min..=args.max);
         tracing::debug!(
@@ -50,6 +29,26 @@ impl Tool for RandomNumberTool {
             result = n,
             "generated random number"
         );
-        Ok(n)
+        Ok(n.to_string())
+    }
+}
+
+impl RandomNumberTool {
+    pub fn tool_def(self) -> ToolDef {
+        ToolDef {
+            tool: Tool::new(
+                "random_number",
+                "Generate a random integer between min and max (inclusive).",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "min": { "type": "integer", "description": "Minimum value (inclusive)" },
+                        "max": { "type": "integer", "description": "Maximum value (inclusive)" }
+                    },
+                    "required": ["min", "max"]
+                }),
+            ),
+            handler: Box::new(self),
+        }
     }
 }

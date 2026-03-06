@@ -1,15 +1,12 @@
 provider:
-  type: "ollama"
-  url: "http://localhost:11434"
-  model: "qwen3:1.7b"
-
-# provider:
-#   type: "openrouter"
-#   api_key: "sk-or-v1-..."
-#   model: "openai/gpt-oss-20b"
+  type: "openrouter"
+  api_key: "sk-or-v1-..."
+  model: "openai/gpt-oss-20b"              # single model (backward compat)
+  # --- or dual-model mode ---
+  # reasoning_model: "openai/gpt-oss-120b:nitro"  # tool-calling phase
+  # response_model: "google/gemini-2.5-flash-lite" # final answer phase
 
 max_iterations: 5
-thinking: false
 
 system_dir: "data/system"
 dynamic_dir: "data/dynamic"

@@ -1,21 +1,15 @@
-use rig::completion::ToolDefinition;
-use rig::tool::Tool;
+use anyhow::{Result, bail};
+use async_trait::async_trait;
+use openrouter_rs::types::Tool;
 use serde::Deserialize;
 use serde_json::json;
 use std::path::{Component, Path, PathBuf};
-use thiserror::Error;
+
+use crate::agent::{ToolDef, ToolHandler};
 
 #[derive(Debug, Deserialize)]
-pub struct LookupReferenceArgs {
-    pub path: String,
-}
-
-#[derive(Debug, Error)]
-pub enum LookupReferenceError {
-    #[error("Path traversal detected: {0}")]
-    PathTraversal(String),
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+struct LookupReferenceArgs {
+    path: String,
 }
 
 pub struct LookupReferenceTool {
@@ -27,10 +21,10 @@ pub struct LookupReferenceTool {
 /// Returns the joined absolute path on success. This works purely on lexical
 /// components (no filesystem access) so it cannot be tricked by symlinks that
 /// don't exist yet, TOCTOU races, or non-existent base directories.
-fn safe_resolve(base_dir: &Path, user_path: &str) -> Result<PathBuf, LookupReferenceError> {
+fn safe_resolve(base_dir: &Path, user_path: &str) -> Result<PathBuf> {
     // Reject absolute paths outright — the input must be relative.
     if Path::new(user_path).is_absolute() {
-        return Err(LookupReferenceError::PathTraversal(user_path.to_string()));
+        bail!("Path traversal detected: {user_path}");
     }
 
     // Walk the user-supplied components, tracking logical depth inside base_dir.
@@ -49,56 +43,57 @@ fn safe_resolve(base_dir: &Path, user_path: &str) -> Result<PathBuf, LookupRefer
             }
             Component::ParentDir => {
                 if depth == 0 {
-                    return Err(LookupReferenceError::PathTraversal(user_path.to_string()));
+                    bail!("Path traversal detected: {user_path}");
                 }
                 resolved.pop();
                 depth -= 1;
             }
             // Prefix (Windows drive) or RootDir — should not appear in relative paths
             _ => {
-                return Err(LookupReferenceError::PathTraversal(user_path.to_string()));
+                bail!("Path traversal detected: {user_path}");
             }
         }
     }
 
     // Must reference an actual file, not the base dir itself.
     if depth == 0 {
-        return Err(LookupReferenceError::PathTraversal(user_path.to_string()));
+        bail!("Path traversal detected: {user_path}");
     }
 
     Ok(resolved)
 }
 
-impl Tool for LookupReferenceTool {
-    const NAME: &'static str = "lookup_reference";
-
-    type Error = LookupReferenceError;
-    type Args = LookupReferenceArgs;
-    type Output = String;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: "lookup_reference".to_string(),
-            description: "Look up a reference file by its relative path within the references directory. Returns the file contents.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Relative path to the reference file (e.g. 'turns/20260228-120000-some-topic.json')"
-                    }
-                },
-                "required": ["path"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+#[async_trait]
+impl ToolHandler for LookupReferenceTool {
+    async fn call(&self, args: &serde_json::Value) -> Result<String> {
+        let args: LookupReferenceArgs = serde_json::from_value(args.clone())?;
         let full_path = safe_resolve(&self.references_dir, &args.path)?;
 
         tracing::debug!(path = %full_path.display(), "looking up reference");
         let content = std::fs::read_to_string(&full_path)?;
         Ok(content)
+    }
+}
+
+impl LookupReferenceTool {
+    pub fn tool_def(self) -> ToolDef {
+        ToolDef {
+            tool: Tool::new(
+                "lookup_reference",
+                "Look up a reference file by its relative path within the references directory. Returns the file contents.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Relative path to the reference file (e.g. 'turns/20260228-120000-some-topic.json')"
+                        }
+                    },
+                    "required": ["path"]
+                }),
+            ),
+            handler: Box::new(self),
+        }
     }
 }
 

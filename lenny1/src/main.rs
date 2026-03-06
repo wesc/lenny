@@ -1,4 +1,5 @@
 mod actions;
+mod agent;
 mod cli_bot;
 mod config;
 mod context;

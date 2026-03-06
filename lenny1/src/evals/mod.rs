@@ -189,6 +189,7 @@ pub(crate) async fn run_contextual_evals(
     let tmpdir = tempfile::tempdir()?;
     let db_path = tmpdir.path().join("test-index");
 
+    eprintln!("  [{label}] model: {}", config.provider.display_short());
     eprintln!(
         "  [{label}] Building contextual index ({} documents)...",
         documents.len()
@@ -446,7 +447,6 @@ fn eval_config(base_config: &Config) -> Result<(Config, tempfile::TempDir)> {
     let config = Config {
         provider: base_config.provider.clone(),
         max_iterations: base_config.max_iterations,
-        thinking: base_config.thinking,
         system_dir: fixtures.join("system"),
         dynamic_dir: fixtures.join("dynamic"),
         knowledge_dir: tmpdir.path().to_path_buf(),
@@ -455,12 +455,15 @@ fn eval_config(base_config: &Config) -> Result<(Config, tempfile::TempDir)> {
         matrix: None,
         min_score_range: base_config.min_score_range,
         score_gap_threshold: base_config.score_gap_threshold,
+        prompt_log: base_config.prompt_log,
     };
     Ok((config, tmpdir))
 }
 
 pub async fn run(base_config: &Config) -> Result<()> {
     let (config, _tmpdir) = eval_config(base_config)?;
+
+    eprintln!("  model: {}\n", config.provider.display_short());
 
     let mut results = Vec::new();
     let mut passed = 0;

@@ -6,32 +6,86 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub enum ProviderConfig {
-    #[serde(rename = "ollama")]
-    Ollama {
-        #[serde(default = "default_ollama_url")]
-        url: String,
-        #[serde(default = "default_model")]
-        model: String,
-    },
     #[serde(rename = "openrouter")]
-    OpenRouter { api_key: String, model: String },
+    OpenRouter {
+        api_key: String,
+        #[serde(default)]
+        model: Option<String>,
+        #[serde(default)]
+        reasoning_model: Option<String>,
+        #[serde(default)]
+        response_model: Option<String>,
+    },
 }
 
 impl ProviderConfig {
     /// Dummy provider for tests that don't call the LLM.
     #[allow(dead_code)]
     pub fn test_default() -> Self {
-        ProviderConfig::Ollama {
-            url: default_ollama_url(),
-            model: default_model(),
+        ProviderConfig::OpenRouter {
+            api_key: "test-key".to_string(),
+            model: Some("test-model".to_string()),
+            reasoning_model: None,
+            response_model: None,
         }
+    }
+
+    fn model_fields(&self) -> (&Option<String>, &Option<String>, &Option<String>) {
+        let ProviderConfig::OpenRouter {
+            model,
+            reasoning_model,
+            response_model,
+            ..
+        } = self;
+        (model, reasoning_model, response_model)
     }
 
     #[allow(dead_code)]
     pub fn model(&self) -> &str {
-        match self {
-            ProviderConfig::Ollama { model, .. } => model,
-            ProviderConfig::OpenRouter { model, .. } => model,
+        let (model, _, _) = self.model_fields();
+        model.as_deref().unwrap_or_else(|| {
+            let (_, r, resp) = self.model_fields();
+            r.as_deref()
+                .or(resp.as_deref())
+                .expect("no model configured")
+        })
+    }
+
+    /// Model for tool-calling / reasoning phase. Falls back to `model`.
+    pub fn reasoning_model(&self) -> &str {
+        let (model, reasoning, _) = self.model_fields();
+        reasoning
+            .as_deref()
+            .or(model.as_deref())
+            .expect("no reasoning_model or model configured")
+    }
+
+    /// Model for final response phase. Falls back to `model`.
+    pub fn response_model(&self) -> &str {
+        let (model, _, response) = self.model_fields();
+        response
+            .as_deref()
+            .or(model.as_deref())
+            .expect("no response_model or model configured")
+    }
+
+    /// True when separate reasoning + response models are configured.
+    pub fn is_dual_model(&self) -> bool {
+        let (_, reasoning, response) = self.model_fields();
+        reasoning.is_some() && response.is_some()
+    }
+
+    /// Short display string like "openrouter/gpt-oss-120b:nitro" or
+    /// "openrouter/gpt-oss-120b:nitro + gemini-2.5-flash-lite" for dual model.
+    pub fn display_short(&self) -> String {
+        if self.is_dual_model() {
+            format!(
+                "openrouter/{} + {}",
+                self.reasoning_model(),
+                self.response_model()
+            )
+        } else {
+            format!("openrouter/{}", self.reasoning_model())
         }
     }
 }
@@ -63,8 +117,6 @@ pub struct Config {
     pub provider: ProviderConfig,
     #[serde(default = "default_max_iterations")]
     pub max_iterations: usize,
-    #[serde(default)]
-    pub thinking: bool,
     #[serde(default = "default_system_dir")]
     pub system_dir: PathBuf,
     #[serde(default = "default_dynamic_dir")]
@@ -81,10 +133,12 @@ pub struct Config {
     pub min_score_range: f32,
     #[serde(default = "default_score_gap_threshold")]
     pub score_gap_threshold: f32,
+    #[serde(default = "default_prompt_log")]
+    pub prompt_log: bool,
 }
 
-fn default_model() -> String {
-    "qwen3:1.7b".to_string()
+fn default_prompt_log() -> bool {
+    true
 }
 fn default_max_iterations() -> usize {
     5
@@ -109,9 +163,6 @@ fn default_min_score_range() -> f32 {
 }
 fn default_score_gap_threshold() -> f32 {
     0.5
-}
-fn default_ollama_url() -> String {
-    "http://localhost:11434".to_string()
 }
 
 impl Config {

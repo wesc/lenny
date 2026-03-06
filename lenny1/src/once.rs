@@ -1,17 +1,19 @@
-use anyhow::Result;
-use rig::client::{CompletionClient, Nothing};
-use rig::completion::TypedPrompt;
-use rig::providers::{ollama, openrouter};
-use schemars::JsonSchema;
+use anyhow::{Result, anyhow};
+use openrouter_rs::{
+    OpenRouterClient,
+    api::chat::{ChatCompletionRequest, Message, Plugin},
+    types::{ResponseFormat, Role},
+};
 use serde::de::DeserializeOwned;
-use serde_json::json;
 use std::fs;
+use std::path::PathBuf;
 
+use crate::agent::{Agent, ToolDef};
 use crate::config::{Config, ProviderConfig};
 use crate::context;
 use crate::tools::{
-    AgentEvent, AgentHook, AgentOutput, AgentState, ContextSearchTool, LookupReferenceTool,
-    RandomLetterTool, RandomNumberTool, WebScrapeTool,
+    AgentEvent, AgentOutput, ContextSearchTool, LennyHook, LookupReferenceTool, RandomLetterTool,
+    RandomNumberTool, WebScrapeTool,
 };
 
 /// Result of running a single prompt through the agent.
@@ -39,55 +41,65 @@ After searching and using any other tools you need, respond with a JSON object:
 combined with your own knowledge, and set slug to a short 2-4 word lowercase hyphenated topic summary.
 - Your ENTIRE response must be valid JSON. No text before or after the JSON object.";
 
-/// Build agent from any CompletionClient, run prompt, return structured result.
-async fn run_with_client<C: CompletionClient>(
-    client: C,
-    model: &str,
-    config: &Config,
-    preamble: &str,
-    user_prompt: &str,
-    additional_params: Option<serde_json::Value>,
-) -> Result<PromptResult> {
-    let state = AgentState::new();
+/// Returns the prompt log path if logging is enabled, `None` otherwise.
+fn prompt_log_path_for(config: &Config) -> Option<PathBuf> {
+    if !config.prompt_log {
+        return None;
+    }
+    Some(
+        config
+            .dynamic_dir
+            .parent()
+            .unwrap_or(&config.dynamic_dir)
+            .join("prompt-log.txt"),
+    )
+}
 
+fn build_client(config: &Config) -> Result<OpenRouterClient> {
+    let ProviderConfig::OpenRouter { ref api_key, .. } = config.provider;
+    Ok(OpenRouterClient::builder().api_key(api_key).build()?)
+}
+
+fn build_tools(config: &Config) -> Vec<ToolDef> {
     let lookup_ref = LookupReferenceTool {
         references_dir: config.references_dir(),
     };
-
     let context_search = ContextSearchTool {
         db_path: config.knowledge_dir.join("comprehensions"),
     };
+    vec![
+        lookup_ref.tool_def(),
+        context_search.tool_def(),
+        RandomNumberTool.tool_def(),
+        RandomLetterTool.tool_def(),
+        WebScrapeTool.tool_def(),
+    ]
+}
 
+/// Run a prompt through the agent and return structured result (no printing).
+pub async fn run_prompt(config: &Config, user_prompt: &str) -> Result<PromptResult> {
+    let preamble = context::assemble_context(&config.system_dir, &config.dynamic_dir)?;
     let full_preamble = format!("{preamble}\n\n{OUTPUT_INSTRUCTIONS}");
 
-    let prompt_log_path = config
-        .dynamic_dir
-        .parent()
-        .unwrap_or(&config.dynamic_dir)
-        .join("prompt-log.txt");
+    let client = build_client(config)?;
+    let tools = build_tools(config);
+    let prompt_log_path = prompt_log_path_for(config);
 
-    let mut builder = client
-        .agent(model)
-        .preamble(&full_preamble)
-        .tool(lookup_ref)
-        .tool(context_search)
-        .tool(RandomNumberTool)
-        .tool(RandomLetterTool)
-        .tool(WebScrapeTool)
-        .default_max_turns(config.max_iterations);
+    let state = crate::tools::AgentState::new();
 
-    if let Some(params) = additional_params {
-        builder = builder.additional_params(params);
-    }
+    let agent = Agent::builder(&client, config)
+        .system(&full_preamble)
+        .tools(&tools)
+        .build();
 
-    let agent = builder.build();
-
-    let hook = AgentHook {
+    let mut hook = LennyHook {
         state: state.clone(),
-        prompt_log_path: Some(prompt_log_path),
+        prompt_log_path,
         preamble: Some(full_preamble.clone()),
     };
-    let output: AgentOutput = agent.prompt_typed(user_prompt).with_hook(hook).await?;
+
+    let result = agent.run(user_prompt, &mut hook).await?;
+    let output: AgentOutput = parse_agent_output(&result.answer)?;
 
     let events = std::mem::take(&mut state.lock().unwrap().events);
 
@@ -108,50 +120,36 @@ async fn run_with_client<C: CompletionClient>(
     }
 }
 
-/// Run a prompt through the agent and return structured result (no printing).
-pub async fn run_prompt(config: &Config, user_prompt: &str) -> Result<PromptResult> {
-    let preamble = context::assemble_context(&config.system_dir, &config.dynamic_dir)?;
-
-    match &config.provider {
-        ProviderConfig::Ollama { url, model } => {
-            let client: ollama::Client = ollama::Client::builder()
-                .api_key(Nothing)
-                .base_url(url)
-                .build()?;
-            let params = Some(json!({"think": config.thinking}));
-            run_with_client(client, model, config, &preamble, user_prompt, params).await
-        }
-        ProviderConfig::OpenRouter { api_key, model } => {
-            let client: openrouter::Client = openrouter::Client::new(api_key)?;
-            run_with_client(client, model, config, &preamble, user_prompt, None).await
-        }
-    }
-}
-
 /// Simple completion: no tools, no hooks. For internal use (e.g. comprehension).
-/// Typed completion: no tools, no hooks. Uses rig's structured output for schema-enforced extraction.
-pub async fn run_completion_typed<T: DeserializeOwned + JsonSchema + Send>(
+/// Uses the response model for a single non-agentic call.
+/// Sends json_object + response-healing to guarantee valid JSON.
+pub async fn run_completion_typed<T: DeserializeOwned + Send>(
     config: &Config,
     preamble: &str,
     prompt: &str,
 ) -> Result<T> {
-    match &config.provider {
-        ProviderConfig::Ollama { url, model } => {
-            let client: ollama::Client = ollama::Client::builder()
-                .api_key(Nothing)
-                .base_url(url)
-                .build()?;
-            let agent = client.agent(model).preamble(preamble).build();
-            let output: T = agent.prompt_typed(prompt).await?;
-            Ok(output)
-        }
-        ProviderConfig::OpenRouter { api_key, model } => {
-            let client: openrouter::Client = openrouter::Client::new(api_key)?;
-            let agent = client.agent(model).preamble(preamble).build();
-            let output: T = agent.prompt_typed(prompt).await?;
-            Ok(output)
-        }
-    }
+    let client = build_client(config)?;
+    let model = config.provider.response_model();
+
+    let request = ChatCompletionRequest::builder()
+        .model(model)
+        .messages(vec![
+            Message::new(Role::System, preamble),
+            Message::new(Role::User, prompt),
+        ])
+        .response_format(ResponseFormat::json_object())
+        .plugins(vec![Plugin::new("response-healing")])
+        .max_tokens(1024u32)
+        .build()?;
+
+    let response = client.send_chat_completion(&request).await?;
+    let choice = response
+        .choices
+        .first()
+        .ok_or_else(|| anyhow!("no choices in response"))?;
+
+    let raw = choice.content().unwrap_or("");
+    parse_json_response(raw)
 }
 
 /// The `once` CLI command: run prompt, print JSON, save turn.
@@ -164,7 +162,7 @@ pub async fn run(config: &Config, user_prompt: &str) -> Result<()> {
         .filter(|e| matches!(e, AgentEvent::ToolCall { .. }))
         .collect();
 
-    let output = json!({
+    let output = serde_json::json!({
         "prompt": user_prompt,
         "answer": result.answer,
         "slug": result.slug,
@@ -175,6 +173,37 @@ pub async fn run(config: &Config, user_prompt: &str) -> Result<()> {
 
     save_turn(config, user_prompt, &result)?;
     Ok(())
+}
+
+/// Parse AgentOutput from a raw LLM response string.
+fn parse_agent_output(raw: &str) -> Result<AgentOutput> {
+    parse_json_response(raw)
+}
+
+/// Parse JSON from an LLM response into T.
+/// Relies on provider-level structured output (OpenRouter json_object + response-healing)
+/// to guarantee valid JSON. Falls back to trimming markdown fences.
+fn parse_json_response<T: DeserializeOwned>(raw: &str) -> Result<T> {
+    // First try direct parse (works when provider enforces JSON schema)
+    if let Ok(val) = serde_json::from_str(raw.trim()) {
+        return Ok(val);
+    }
+    // Fallback: strip markdown code fences
+    let trimmed = raw.trim();
+    let json_str = if trimmed.starts_with("```") {
+        let after_first = trimmed
+            .strip_prefix("```json")
+            .or_else(|| trimmed.strip_prefix("```"))
+            .unwrap_or(trimmed);
+        after_first
+            .strip_suffix("```")
+            .unwrap_or(after_first)
+            .trim()
+    } else {
+        trimmed
+    };
+    serde_json::from_str(json_str)
+        .map_err(|e| anyhow!("Failed to parse LLM response as JSON: {e}\nRaw response: {raw}"))
 }
 
 pub fn sanitize_slug(s: &str) -> String {
@@ -197,7 +226,7 @@ fn save_turn(config: &Config, prompt: &str, result: &PromptResult) -> Result<()>
 
     let mut lines = Vec::new();
 
-    lines.push(serde_json::to_string(&json!({
+    lines.push(serde_json::to_string(&serde_json::json!({
         "type": "prompt",
         "content": prompt,
         "timestamp": timestamp.to_rfc3339(),
@@ -207,7 +236,7 @@ fn save_turn(config: &Config, prompt: &str, result: &PromptResult) -> Result<()>
         lines.push(serde_json::to_string(event)?);
     }
 
-    lines.push(serde_json::to_string(&json!({
+    lines.push(serde_json::to_string(&serde_json::json!({
         "type": "answer",
         "content": result.answer,
         "slug": result.slug,

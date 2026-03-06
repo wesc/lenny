@@ -6,7 +6,6 @@ fn make_config(tmpdir: &tempfile::TempDir) -> Config {
     Config {
         provider: ProviderConfig::test_default(),
         max_iterations: 1,
-        thinking: false,
         system_dir: tmpdir.path().join("system"),
         dynamic_dir: tmpdir.path().join("dynamic"),
         knowledge_dir: tmpdir.path().join("knowledge"),
@@ -15,6 +14,7 @@ fn make_config(tmpdir: &tempfile::TempDir) -> Config {
         matrix: None,
         min_score_range: 2.0,
         score_gap_threshold: 0.5,
+        prompt_log: false,
     }
 }
 
