@@ -37,8 +37,9 @@ After searching and using any other tools you need, respond with a JSON object:
 {\"no_response\": bool, \"answer\": string, \"slug\": string}
 
 - If the message is not directed at you or needs no reply: {\"no_response\": true, \"answer\": \"\", \"slug\": \"\"}
-- Otherwise: set no_response to false, answer using what you found in the knowledge base \
-combined with your own knowledge, and set slug to a short 2-4 word lowercase hyphenated topic summary.
+- Otherwise: set no_response to false, answer using what you found in the knowledge base, \
+and set slug to a short 2-4 word lowercase hyphenated topic summary.
+- If context_search returns no relevant results, say you don't have that information in your knowledge base.
 - Your ENTIRE response must be valid JSON. No text before or after the JSON object.";
 
 /// Returns the prompt log path if logging is enabled, `None` otherwise.
