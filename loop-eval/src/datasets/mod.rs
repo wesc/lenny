@@ -1,3 +1,4 @@
+pub mod empty_search;
 pub mod hallucination;
 pub mod tool_use;
 
@@ -49,10 +50,14 @@ pub struct Dataset {
 
 /// Return all registered datasets.
 pub fn all_datasets() -> Vec<Dataset> {
-    vec![tool_use::dataset(), hallucination::dataset()]
+    vec![
+        tool_use::dataset(),
+        hallucination::dataset(),
+        empty_search::dataset(),
+    ]
 }
 
 /// Valid dataset names (for CLI validation).
 pub fn dataset_names() -> Vec<&'static str> {
-    vec!["tool_use", "hallucination"]
+    vec!["tool_use", "hallucination", "empty_search"]
 }

@@ -24,6 +24,10 @@ fn handle_random_letter(_args: &serde_json::Value) -> Result<String> {
     Ok(c.to_string())
 }
 
+fn handle_context_search(_args: &serde_json::Value) -> Result<String> {
+    Ok("No relevant context found.".to_string())
+}
+
 /// All available tools.
 pub fn all_tools() -> Vec<ToolDef> {
     vec![
@@ -54,6 +58,27 @@ pub fn all_tools() -> Vec<ToolDef> {
             handler: handle_random_letter,
         },
     ]
+}
+
+/// Tools for the empty_search dataset: context_search that always returns nothing.
+pub fn empty_search_tools() -> Vec<ToolDef> {
+    vec![ToolDef {
+        tool: Tool::new(
+            "context_search",
+            "Search past conversations and documents by semantic similarity. Returns relevant context passages.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query describing what information to find"
+                    }
+                },
+                "required": ["query"]
+            }),
+        ),
+        handler: handle_context_search,
+    }]
 }
 
 /// Look up a tool's handler by name and execute it.
