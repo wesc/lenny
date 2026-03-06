@@ -52,6 +52,27 @@ On insertion of new content, a background process starts up that summarizes the 
 
 Eventually the dreamer will comprehend old `dynamic/` files: feed them to a capable LLM to generate comprehensions, move the originals into `references/`, and write the comprehensions back to `dynamic/`. This keeps the working memory within token limits while preserving full history in references.
 
+## Implementation Notes
+
+### Model Reasoning Effort Levels
+
+Discovered via `cargo run --bin discover_reasoning_levels` (probes each model with a trivial prompt at every effort level):
+
+| Model | Min Effort | Supported Levels |
+|---|---|---|
+| `openai/gpt-oss-120b:nitro` | `minimal` | minimal, low, medium, high |
+| `openai/gpt-oss-20b:nitro` | `minimal` | minimal, low, medium, high |
+| `meta-llama/llama-3.1-8b-instruct:nitro` | `none` | none, minimal, low, medium, high |
+| `google/gemini-2.5-flash-lite:nitro` | `none` | none, minimal, low, medium, high |
+| `qwen/qwen3-32b:nitro` | `none` | none, minimal, low, medium, high |
+| `anthropic/claude-haiku-4.5:nitro` | `none` | none, minimal, low, medium, high |
+
+The gpt-oss models reject `Effort::None` and require at least `minimal`. All other candidate models accept every effort level.
+
+### Dual-Model Architecture
+
+The agent uses a two-phase approach: a reasoning model handles tool calling (e.g. `context_search`), then a response model produces the final JSON answer. This allows using a fast but hallucination-prone reasoner (like gpt-oss) paired with a more reliable response model. The response phase gets a separate system prompt without tool-calling instructions, since it has no tools available.
+
 ## The Next Lenny1
 
 I am trying to unify the whole architecture. Suppose we have a new `working-memory/` directory. Here's what happens.. things like the cli-bot or matrix-bot or anything else plop stuff into working-memory. This is done with schema-less files.. if it makes sense the files exist as text, markdown, or json. If there is structure then ideally it is json. The paths must be unique-ish, so a matrix-bot might plop files down like `working-memory/matrix/BOT_USER/{00-preamble.txt,10-ROOM_ID.json}`, etc. Note in this case the 10-room_id.json is unique but 00-preamble.txt is not. You'll see what I mean in a minute... All these files are included in the context in lexicographical order.

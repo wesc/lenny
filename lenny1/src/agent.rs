@@ -122,7 +122,10 @@ pub struct Agent<'a> {
     client: &'a OpenRouterClient,
     reasoning_model: &'a str,
     response_model: &'a str,
+    /// System prompt for the reasoning phase (includes tool-calling instructions).
     system: &'a str,
+    /// System prompt for the response phase (no tool instructions). Falls back to `system`.
+    response_system: Option<&'a str>,
     tool_defs: &'a [ToolDef],
     max_iterations: usize,
     reasoning_max_tokens: u32,
@@ -136,6 +139,7 @@ pub struct AgentBuilder<'a> {
     reasoning_model: &'a str,
     response_model: &'a str,
     system: &'a str,
+    response_system: Option<&'a str>,
     tool_defs: &'a [ToolDef],
     max_iterations: usize,
     reasoning_max_tokens: u32,
@@ -146,6 +150,12 @@ pub struct AgentBuilder<'a> {
 impl<'a> AgentBuilder<'a> {
     pub fn system(mut self, system: &'a str) -> Self {
         self.system = system;
+        self
+    }
+
+    /// Set a separate system prompt for the response phase (without tool instructions).
+    pub fn response_system(mut self, system: &'a str) -> Self {
+        self.response_system = Some(system);
         self
     }
 
@@ -172,6 +182,7 @@ impl<'a> AgentBuilder<'a> {
             reasoning_model: self.reasoning_model,
             response_model: self.response_model,
             system: self.system,
+            response_system: self.response_system,
             tool_defs: self.tool_defs,
             max_iterations: self.max_iterations,
             reasoning_max_tokens: self.reasoning_max_tokens,
@@ -188,6 +199,7 @@ impl<'a> Agent<'a> {
             reasoning_model: config.provider.reasoning_model(),
             response_model: config.provider.response_model(),
             system: "",
+            response_system: None,
             tool_defs: &[],
             max_iterations: config.max_iterations,
             reasoning_max_tokens: 2048,
@@ -219,7 +231,6 @@ impl<'a> Agent<'a> {
             .tools(tools)
             .tool_choice_auto()
             .max_tokens(self.reasoning_max_tokens)
-            .reasoning_effort(Effort::High)
             .build()?;
 
         hook.on_request(state.iterations, &request);
@@ -338,11 +349,13 @@ impl<'a> Agent<'a> {
             )
         };
 
+        let system = self.response_system.unwrap_or(self.system);
+
         let mut builder = ChatCompletionRequest::builder();
         builder
             .model(self.response_model)
             .messages(vec![
-                Message::new(Role::System, self.system),
+                Message::new(Role::System, system),
                 Message::new(Role::User, prompt.as_str()),
             ])
             .max_tokens(self.response_max_tokens)
@@ -366,6 +379,39 @@ impl<'a> Agent<'a> {
         hook.on_response_phase_done(&answer);
         Ok(answer)
     }
+}
+
+/// Effort levels ordered from lowest to highest.
+pub const EFFORT_LEVELS: [Effort; 5] = [
+    Effort::None,
+    Effort::Minimal,
+    Effort::Low,
+    Effort::Medium,
+    Effort::High,
+];
+
+/// Probe a model to find the lowest accepted reasoning effort.
+/// Sends a trivial prompt at each level starting from None; returns the first
+/// that succeeds.
+pub async fn probe_min_effort(client: &OpenRouterClient, model: &str) -> Result<Effort> {
+    for effort in &EFFORT_LEVELS {
+        let mut builder = ChatCompletionRequest::builder();
+        builder
+            .model(model)
+            .messages(vec![Message::new(Role::User, "Say OK.")])
+            .max_tokens(4u32)
+            .reasoning_effort(effort.clone());
+        if matches!(effort, Effort::None) {
+            builder.reasoning_max_tokens(0u32);
+        }
+        let request = builder.build()?;
+
+        match client.send_chat_completion(&request).await {
+            Ok(_) => return Ok(effort.clone()),
+            Err(_) => continue,
+        }
+    }
+    bail!("model rejected all effort levels")
 }
 
 /// Format tool events into a human-readable context block.

@@ -135,6 +135,8 @@ pub struct Config {
     pub score_gap_threshold: f32,
     #[serde(default = "default_prompt_log")]
     pub prompt_log: bool,
+    #[serde(default)]
+    pub model_candidates: Vec<String>,
 }
 
 fn default_prompt_log() -> bool {

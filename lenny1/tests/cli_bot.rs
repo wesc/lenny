@@ -15,6 +15,7 @@ fn make_config(tmpdir: &tempfile::TempDir) -> Config {
         min_score_range: 2.0,
         score_gap_threshold: 0.5,
         prompt_log: false,
+        model_candidates: Vec::new(),
     }
 }
 

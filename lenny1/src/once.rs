@@ -24,22 +24,29 @@ pub struct PromptResult {
     pub events: Vec<AgentEvent>,
 }
 
-const OUTPUT_INSTRUCTIONS: &str = "\
+/// Instructions for the reasoning phase: tells the model to use tools.
+const TOOL_INSTRUCTIONS: &str = "\
 IMPORTANT — Knowledge base procedure:
 BEFORE answering, you MUST call context_search with a query derived from the user's message. \
 This applies to virtually every question — about yourself, your preferences, past events, facts, \
 people, decisions, or anything that might have been discussed before. \
 The only exceptions are purely procedural messages (e.g. \"hello\", \"thanks\") that clearly \
 need no factual lookup. When in doubt, search. You may call context_search multiple times \
-with different queries if the topic is broad.
+with different queries if the topic is broad.";
 
-After searching and using any other tools you need, respond with a JSON object:
+/// Instructions for the response phase: JSON format + anti-hallucination guardrail.
+/// No mention of tools — the response model doesn't have any.
+const RESPONSE_INSTRUCTIONS: &str = "\
+Respond with a JSON object:
 {\"no_response\": bool, \"answer\": string, \"slug\": string}
 
-- If the message is not directed at you or needs no reply: {\"no_response\": true, \"answer\": \"\", \"slug\": \"\"}
-- Otherwise: set no_response to false, answer using what you found in the knowledge base, \
+- Ensure that all the fields in the response JSON are the correct type.
+- If the message is not directed at you or needs no reply, you MUST respond: {\"no_response\": true, \"answer\": \"\", \"slug\": \"\"}
+- Otherwise: set no_response to false, answer the question, \
 and set slug to a short 2-4 word lowercase hyphenated topic summary.
-- If context_search returns no relevant results, say you don't have that information in your knowledge base.
+- For questions about personal details, preferences, history, or specific facts about people and projects: \
+only use what is in your provided context or tool results. If that information was not found, \
+say you don't have it in your knowledge base rather than guessing.
 - Your ENTIRE response must be valid JSON. No text before or after the JSON object.";
 
 /// Returns the prompt log path if logging is enabled, `None` otherwise.
@@ -80,7 +87,8 @@ fn build_tools(config: &Config) -> Vec<ToolDef> {
 /// Run a prompt through the agent and return structured result (no printing).
 pub async fn run_prompt(config: &Config, user_prompt: &str) -> Result<PromptResult> {
     let preamble = context::assemble_context(&config.system_dir, &config.dynamic_dir)?;
-    let full_preamble = format!("{preamble}\n\n{OUTPUT_INSTRUCTIONS}");
+    let reasoning_system = format!("{preamble}\n\n{TOOL_INSTRUCTIONS}\n\n{RESPONSE_INSTRUCTIONS}");
+    let response_system = format!("{preamble}\n\n{RESPONSE_INSTRUCTIONS}");
 
     let client = build_client(config)?;
     let tools = build_tools(config);
@@ -89,14 +97,15 @@ pub async fn run_prompt(config: &Config, user_prompt: &str) -> Result<PromptResu
     let state = crate::tools::AgentState::new();
 
     let agent = Agent::builder(&client, config)
-        .system(&full_preamble)
+        .system(&reasoning_system)
+        .response_system(&response_system)
         .tools(&tools)
         .build();
 
     let mut hook = LennyHook {
         state: state.clone(),
         prompt_log_path,
-        preamble: Some(full_preamble.clone()),
+        preamble: Some(reasoning_system.clone()),
     };
 
     let result = agent.run(user_prompt, &mut hook).await?;
