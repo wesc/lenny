@@ -6,7 +6,7 @@ use openrouter_rs::{
 };
 use serde::de::DeserializeOwned;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::agent::{Agent, ToolDef};
 use crate::config::{Config, ProviderConfig};
@@ -85,8 +85,19 @@ fn build_tools(config: &Config) -> Vec<ToolDef> {
 }
 
 /// Run a prompt through the agent and return structured result (no printing).
+/// Uses the base `config.system_dir`. For channel-specific system prompts,
+/// use `run_prompt_with_system_dir`.
 pub async fn run_prompt(config: &Config, user_prompt: &str) -> Result<PromptResult> {
-    let preamble = context::assemble_context(&config.system_dir, &config.dynamic_dir)?;
+    run_prompt_with_system_dir(config, &config.system_dir, user_prompt).await
+}
+
+/// Run a prompt with a custom system directory for context assembly.
+pub async fn run_prompt_with_system_dir(
+    config: &Config,
+    system_dir: &Path,
+    user_prompt: &str,
+) -> Result<PromptResult> {
+    let preamble = context::assemble_context(system_dir, &config.dynamic_dir)?;
     let reasoning_system = format!("{preamble}\n\n{TOOL_INSTRUCTIONS}\n\n{RESPONSE_INSTRUCTIONS}");
     let response_system = format!("{preamble}\n\n{RESPONSE_INSTRUCTIONS}");
 

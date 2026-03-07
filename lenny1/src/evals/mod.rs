@@ -455,7 +455,7 @@ fn eval_config(base_config: &Config) -> Result<(Config, tempfile::TempDir)> {
         matrix: None,
         min_score_range: base_config.min_score_range,
         score_gap_threshold: base_config.score_gap_threshold,
-        prompt_log: base_config.prompt_log,
+        prompt_log: false,
         model_candidates: Vec::new(),
     };
     Ok((config, tmpdir))

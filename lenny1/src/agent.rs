@@ -390,10 +390,18 @@ pub const EFFORT_LEVELS: [Effort; 5] = [
     Effort::High,
 ];
 
-/// Probe a model to find the lowest accepted reasoning effort.
-/// Sends a trivial prompt at each level starting from None; returns the first
-/// that succeeds.
-pub async fn probe_min_effort(client: &OpenRouterClient, model: &str) -> Result<Effort> {
+/// Result of probing a model's supported effort levels.
+pub struct EffortRange {
+    pub min: Effort,
+    pub max: Effort,
+    pub supported: Vec<Effort>,
+}
+
+/// Probe a model to discover which reasoning effort levels it supports.
+/// Tries each level from None to High, returns the range and full breakdown.
+pub async fn probe_effort_range(client: &OpenRouterClient, model: &str) -> Result<EffortRange> {
+    let mut supported = Vec::new();
+
     for effort in &EFFORT_LEVELS {
         let mut builder = ChatCompletionRequest::builder();
         builder
@@ -406,12 +414,23 @@ pub async fn probe_min_effort(client: &OpenRouterClient, model: &str) -> Result<
         }
         let request = builder.build()?;
 
-        match client.send_chat_completion(&request).await {
-            Ok(_) => return Ok(effort.clone()),
-            Err(_) => continue,
+        if client.send_chat_completion(&request).await.is_ok() {
+            supported.push(effort.clone());
         }
     }
-    bail!("model rejected all effort levels")
+
+    if supported.is_empty() {
+        bail!("model rejected all effort levels");
+    }
+
+    let min = supported.first().unwrap().clone();
+    let max = supported.last().unwrap().clone();
+
+    Ok(EffortRange {
+        min,
+        max,
+        supported,
+    })
 }
 
 /// Format tool events into a human-readable context block.

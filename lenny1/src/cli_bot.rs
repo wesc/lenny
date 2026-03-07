@@ -8,7 +8,7 @@ use crate::once;
 /// Run an interactive chat loop, reading from `input` and writing to `output`.
 ///
 /// Each line triggers a fresh agent call via `once::run_prompt`. Chat history
-/// is persisted as NDJSON to `dynamic/cli-bot/{session_id}.json` so it appears
+/// is persisted as NDJSON to `dynamic/cli/{session_id}.json` so it appears
 /// directly in assembled context.
 pub async fn chat_loop<R: BufRead, W: Write>(
     config: &Config,
@@ -33,7 +33,8 @@ pub async fn chat_loop<R: BufRead, W: Write>(
         }
 
         let ts = chrono::Utc::now().timestamp();
-        let result = match once::run_prompt(config, line).await {
+        let system_dir = config.system_dir.join("cli");
+        let result = match once::run_prompt_with_system_dir(config, &system_dir, line).await {
             Ok(r) => r,
             Err(e) => {
                 writeln!(output, "\n\x1b[38;5;245m[no response: {e}]\x1b[0m\n")?;
@@ -59,7 +60,7 @@ pub async fn chat_loop<R: BufRead, W: Write>(
             }))?);
         }
 
-        save_dynamic_chat(config, "cli-bot", &session_id, &lines)?;
+        save_dynamic_chat(config, "cli", &session_id, &lines)?;
     }
 
     Ok(())

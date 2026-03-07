@@ -269,7 +269,8 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
                 let prompt =
                     format!("[room: {room_name} ({room_id})] {display} ({sender}): {body}");
 
-                match once::run_prompt(&config, &prompt).await {
+                let system_dir = config.system_dir.join("matrix");
+                match once::run_prompt_with_system_dir(&config, &system_dir, &prompt).await {
                     Ok(result) if !result.skipped => {
                         let mut content = RoomMessageEventContent::text_plain(&result.answer);
                         if let Some(thread_root) = thread_root {

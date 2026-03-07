@@ -62,6 +62,8 @@ enum Command {
         #[command(subcommand)]
         cmd: ComprehensionCmd,
     },
+    /// Probe model_candidates for supported reasoning effort levels
+    DiscoverReasoningLevels,
 }
 
 #[derive(Subcommand)]
@@ -152,10 +154,61 @@ async fn main() {
                 actions::comprehension::search_json(&config, &query, n).await
             }
         },
+        Command::DiscoverReasoningLevels => discover_reasoning_levels(&config).await,
     };
 
     if let Err(e) = result {
         eprintln!("Error: {e}");
         process::exit(1);
     }
+}
+
+async fn discover_reasoning_levels(config: &config::Config) -> anyhow::Result<()> {
+    use config::ProviderConfig;
+    use openrouter_rs::OpenRouterClient;
+
+    if config.model_candidates.is_empty() {
+        anyhow::bail!("No model_candidates configured");
+    }
+
+    let ProviderConfig::OpenRouter { ref api_key, .. } = config.provider;
+    let client = OpenRouterClient::builder().api_key(api_key).build()?;
+
+    eprintln!(
+        "Probing {} model(s) for reasoning effort support...\n",
+        config.model_candidates.len()
+    );
+
+    for model in &config.model_candidates {
+        eprint!("  {model} ... ");
+
+        match agent::probe_effort_range(&client, model).await {
+            Ok(range) => {
+                let supported_strs: Vec<String> =
+                    range.supported.iter().map(|e| format!("{e}")).collect();
+                let levels: Vec<String> = agent::EFFORT_LEVELS
+                    .iter()
+                    .map(|e| {
+                        let s = format!("{e}");
+                        if supported_strs.contains(&s) {
+                            s
+                        } else {
+                            format!("({s})")
+                        }
+                    })
+                    .collect();
+                eprintln!(
+                    "min={} max={}  levels: {}",
+                    range.min,
+                    range.max,
+                    levels.join(" ")
+                );
+            }
+            Err(e) => {
+                eprintln!("FAILED: {e}");
+            }
+        }
+    }
+
+    Ok(())
 }

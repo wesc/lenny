@@ -96,20 +96,20 @@ fn preserves_subdir_structure() {
     fs::create_dir_all(config.references_dir()).unwrap();
 
     // Create a file in a subdirectory
-    write_dynamic_file(&config, "cli-bot/session.json", 40);
+    write_dynamic_file(&config, "cli/session.json", 40);
 
     let files = collect_dynamic_files(&config).unwrap();
 
     // Manually move to references to test structure preservation
     move_to_references(&config, &files).unwrap();
 
-    let dest = config.references_dir().join("cli-bot/session.json");
+    let dest = config.references_dir().join("cli/session.json");
     assert!(
         dest.exists(),
-        "file should exist at references/cli-bot/session.json"
+        "file should exist at references/cli/session.json"
     );
 
-    let src = config.dynamic_dir.join("cli-bot/session.json");
+    let src = config.dynamic_dir.join("cli/session.json");
     assert!(!src.exists(), "file should be removed from dynamic/");
 }
 

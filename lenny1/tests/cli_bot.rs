@@ -136,9 +136,9 @@ fn dynamic_writes_valid_ndjson() {
         chat_line(1740000001, "lennybot", "hi there"),
     ];
 
-    save_dynamic_chat(&config, "cli-bot", "cli-test", &lines).unwrap();
+    save_dynamic_chat(&config, "cli", "cli-test", &lines).unwrap();
 
-    let path = config.dynamic_dir.join("cli-bot/cli-test.json");
+    let path = config.dynamic_dir.join("cli/cli-test.json");
     let content = fs::read_to_string(&path).unwrap();
     let parsed: Vec<serde_json::Value> = content
         .lines()
@@ -162,16 +162,16 @@ fn dynamic_accumulates_lines() {
         chat_line(1740000000, "user", "first"),
         chat_line(1740000001, "lennybot", "reply1"),
     ];
-    save_dynamic_chat(&config, "cli-bot", "cli-accum", &lines).unwrap();
+    save_dynamic_chat(&config, "cli", "cli-accum", &lines).unwrap();
 
-    let path = config.dynamic_dir.join("cli-bot/cli-accum.json");
+    let path = config.dynamic_dir.join("cli/cli-accum.json");
     let content = fs::read_to_string(&path).unwrap();
     let count = content.lines().filter(|l| !l.trim().is_empty()).count();
     assert_eq!(count, 2);
 
     lines.push(chat_line(1740000010, "user", "second"));
     lines.push(chat_line(1740000011, "lennybot", "reply2"));
-    save_dynamic_chat(&config, "cli-bot", "cli-accum", &lines).unwrap();
+    save_dynamic_chat(&config, "cli", "cli-accum", &lines).unwrap();
 
     let content = fs::read_to_string(&path).unwrap();
     let count = content.lines().filter(|l| !l.trim().is_empty()).count();
@@ -183,12 +183,12 @@ fn dynamic_creates_subdir() {
     let tmpdir = tempfile::tempdir().unwrap();
     let config = make_config(&tmpdir);
 
-    assert!(!config.dynamic_dir.join("cli-bot").exists());
+    assert!(!config.dynamic_dir.join("cli").exists());
 
     let lines = vec![chat_line(1740000000, "user", "hi")];
-    save_dynamic_chat(&config, "cli-bot", "cli-mkdir", &lines).unwrap();
+    save_dynamic_chat(&config, "cli", "cli-mkdir", &lines).unwrap();
 
-    assert!(config.dynamic_dir.join("cli-bot/cli-mkdir.json").exists());
+    assert!(config.dynamic_dir.join("cli/cli-mkdir.json").exists());
 }
 
 #[test]
@@ -200,9 +200,9 @@ fn dynamic_atomic_write_no_temp_files_left() {
         chat_line(1740000000, "user", "hello"),
         chat_line(1740000001, "lennybot", "world"),
     ];
-    save_dynamic_chat(&config, "cli-bot", "cli-atomic", &lines).unwrap();
+    save_dynamic_chat(&config, "cli", "cli-atomic", &lines).unwrap();
 
-    let target_dir = config.dynamic_dir.join("cli-bot");
+    let target_dir = config.dynamic_dir.join("cli");
     let entries: Vec<_> = fs::read_dir(&target_dir)
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())

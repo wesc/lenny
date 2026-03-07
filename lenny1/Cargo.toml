@@ -2,6 +2,7 @@
 name = "lenny1"
 version = "0.1.0"
 edition = "2024"
+default-run = "lenny1"
 
 [dependencies]
 openrouter-rs = "0.5.2"
