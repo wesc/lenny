@@ -68,6 +68,11 @@ enum Command {
         #[command(subcommand)]
         cmd: ResearchCmd,
     },
+    /// Estimate token counts for files in a directory or a single file
+    EstimateTokens {
+        /// File or directory to scan
+        path: PathBuf,
+    },
     /// Probe model_candidates for supported reasoning effort levels
     DiscoverReasoningLevels,
 }
@@ -193,6 +198,7 @@ async fn main() {
                 research::bluesky::run(&config, &since, &until).await
             }
         },
+        Command::EstimateTokens { path } => estimate_tokens(&path),
         Command::DiscoverReasoningLevels => discover_reasoning_levels(&config).await,
     };
 
@@ -200,6 +206,49 @@ async fn main() {
         eprintln!("Error: {e}");
         process::exit(1);
     }
+}
+
+fn estimate_tokens(path: &Path) -> anyhow::Result<()> {
+    fn approx_tokens(text: &str) -> usize {
+        text.split_whitespace().count()
+    }
+
+    fn collect_files(path: &Path, files: &mut Vec<PathBuf>) -> anyhow::Result<()> {
+        if path.is_file() {
+            files.push(path.to_path_buf());
+        } else if path.is_dir() {
+            let mut entries: Vec<_> = std::fs::read_dir(path)?.filter_map(|e| e.ok()).collect();
+            entries.sort_by_key(|e| e.path());
+            for entry in entries {
+                let p = entry.path();
+                if p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with('.'))
+                {
+                    continue;
+                }
+                collect_files(&p, &mut *files)?;
+            }
+        }
+        Ok(())
+    }
+
+    let mut files = Vec::new();
+    collect_files(path, &mut files)?;
+
+    let mut total = 0usize;
+    for file in &files {
+        let content = match std::fs::read_to_string(file) {
+            Ok(c) => c,
+            Err(_) => continue, // skip binary / unreadable files
+        };
+        let tokens = approx_tokens(&content);
+        total += tokens;
+        println!("{tokens:>8}  {}", file.display());
+    }
+    println!("{total:>8}  total");
+
+    Ok(())
 }
 
 async fn discover_reasoning_levels(config: &config::Config) -> anyhow::Result<()> {
