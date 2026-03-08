@@ -137,6 +137,8 @@ pub struct Config {
     pub prompt_log: bool,
     #[serde(default)]
     pub model_candidates: Vec<String>,
+    #[serde(default)]
+    pub firecrawl_api_key: Option<String>,
 }
 
 fn default_prompt_log() -> bool {

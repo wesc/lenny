@@ -1,13 +1,19 @@
+mod bluesky_trending;
 mod context_search;
 mod lookup_reference;
 mod random_letter;
 mod random_number;
+mod scrape_url;
+mod summarize_url;
 mod web_scrape;
 
+pub use bluesky_trending::{BlueskyTrendingTool, fetch_trending};
 pub use context_search::ContextSearchTool;
 pub use lookup_reference::LookupReferenceTool;
 pub use random_letter::RandomLetterTool;
 pub use random_number::RandomNumberTool;
+pub use scrape_url::ScrapeUrlTool;
+pub use summarize_url::SummarizeUrlTool;
 pub use web_scrape::WebScrapeTool;
 
 use serde::{Deserialize, Serialize};

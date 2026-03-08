@@ -18,6 +18,7 @@ fn make_config(tmpdir: &tempfile::TempDir) -> Config {
         score_gap_threshold: 0.5,
         prompt_log: false,
         model_candidates: Vec::new(),
+        firecrawl_api_key: None,
     }
 }
 

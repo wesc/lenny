@@ -21,7 +21,7 @@ rand = "0.9"
 regex = "1"
 tempfile = "3"
 matrix-sdk = { version = "0.16", default-features = false, features = ["rustls-tls", "sqlite", "e2e-encryption", "automatic-room-key-forwarding"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 futures-util = "0.3"
 url = "2"
 schemars = "1"
@@ -31,6 +31,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 fastembed = "5"
 rusqlite = { version = "0.37", features = ["bundled"] }
 sqlite-vec = "0.1"
+firecrawl = "1.2.1"
+pulldown-cmark = "0.13.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }

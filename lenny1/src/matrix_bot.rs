@@ -29,6 +29,14 @@ use url::Url;
 use crate::config::{Config, RespondTo};
 use crate::{cli_bot, once};
 
+/// Convert a markdown string to HTML for Matrix formatted messages.
+fn markdown_to_html(md: &str) -> String {
+    let parser = pulldown_cmark::Parser::new(md);
+    let mut html = String::new();
+    pulldown_cmark::html::push_html(&mut html, parser);
+    html
+}
+
 fn sanitize_room_name(name: &str) -> String {
     let s: String = name
         .to_lowercase()
@@ -220,7 +228,7 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
             tokio::spawn(async move {
                 let room_id = room.room_id().to_string();
                 let sender_name = room
-                    .get_member_no_sync(&event_sender)
+                    .get_member(&event_sender)
                     .await
                     .ok()
                     .flatten()
@@ -272,7 +280,8 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
                 let system_dir = config.system_dir.join("matrix");
                 match once::run_prompt_with_system_dir(&config, &system_dir, &prompt).await {
                     Ok(result) if !result.skipped => {
-                        let mut content = RoomMessageEventContent::text_plain(&result.answer);
+                        let html = markdown_to_html(&result.answer);
+                        let mut content = RoomMessageEventContent::text_html(&result.answer, &html);
                         if let Some(thread_root) = thread_root {
                             // Post to the thread (not a reply to a specific message)
                             content.relates_to = Some(Relation::Thread(Thread::plain(

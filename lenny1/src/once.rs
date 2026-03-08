@@ -13,7 +13,7 @@ use crate::config::{Config, ProviderConfig};
 use crate::context;
 use crate::tools::{
     AgentEvent, AgentOutput, ContextSearchTool, LennyHook, LookupReferenceTool, RandomLetterTool,
-    RandomNumberTool, WebScrapeTool,
+    RandomNumberTool, ScrapeUrlTool, SummarizeUrlTool, WebScrapeTool,
 };
 
 /// Result of running a single prompt through the agent.
@@ -75,13 +75,25 @@ fn build_tools(config: &Config) -> Vec<ToolDef> {
     let context_search = ContextSearchTool {
         db_path: config.knowledge_dir.join("comprehensions"),
     };
-    vec![
+    let mut tools = vec![
         lookup_ref.tool_def(),
         context_search.tool_def(),
         RandomNumberTool.tool_def(),
         RandomLetterTool.tool_def(),
         WebScrapeTool.tool_def(),
-    ]
+    ];
+    if let Some(ref api_key) = config.firecrawl_api_key {
+        if let Ok(firecrawl) = firecrawl::FirecrawlApp::new(api_key) {
+            tools.push(
+                SummarizeUrlTool {
+                    firecrawl: firecrawl.clone(),
+                }
+                .tool_def(),
+            );
+            tools.push(ScrapeUrlTool { firecrawl }.tool_def());
+        }
+    }
+    tools
 }
 
 /// Run a prompt through the agent and return structured result (no printing).

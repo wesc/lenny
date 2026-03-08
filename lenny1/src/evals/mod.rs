@@ -457,6 +457,7 @@ fn eval_config(base_config: &Config) -> Result<(Config, tempfile::TempDir)> {
         score_gap_threshold: base_config.score_gap_threshold,
         prompt_log: false,
         model_candidates: Vec::new(),
+        firecrawl_api_key: None,
     };
     Ok((config, tmpdir))
 }

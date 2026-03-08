@@ -9,6 +9,7 @@ mod embed;
 mod evals;
 mod matrix_bot;
 mod once;
+mod research;
 mod tools;
 
 use clap::{Parser, Subcommand};
@@ -62,8 +63,26 @@ enum Command {
         #[command(subcommand)]
         cmd: ComprehensionCmd,
     },
+    /// Run research tasks
+    Research {
+        #[command(subcommand)]
+        cmd: ResearchCmd,
+    },
     /// Probe model_candidates for supported reasoning effort levels
     DiscoverReasoningLevels,
+}
+
+#[derive(Subcommand)]
+enum ResearchCmd {
+    /// Search Bluesky for trending AI/ML links
+    Bluesky {
+        /// Start date (YYYY-MM-DD), defaults to 24 hours ago
+        #[arg(long)]
+        since: Option<String>,
+        /// End date (YYYY-MM-DD), defaults to now
+        #[arg(long)]
+        until: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -152,6 +171,26 @@ async fn main() {
             ComprehensionCmd::Search { query, n } => {
                 let query = query.join(" ");
                 actions::comprehension::search_json(&config, &query, n).await
+            }
+        },
+        Command::Research { cmd } => match cmd {
+            ResearchCmd::Bluesky { since, until } => {
+                let now = chrono::Utc::now();
+                let since = since.map(|d| format!("{d}T00:00:00Z")).unwrap_or_else(|| {
+                    (now - chrono::Duration::hours(24))
+                        .format("%Y-%m-%dT%H:%M:%SZ")
+                        .to_string()
+                });
+                let until = until
+                    .map(|d| {
+                        // Next day at midnight so the entire end date is included
+                        let date = chrono::NaiveDate::parse_from_str(&d, "%Y-%m-%d")
+                            .expect("--until should be YYYY-MM-DD");
+                        let next_day = date + chrono::Duration::days(1);
+                        format!("{next_day}T00:00:00Z")
+                    })
+                    .unwrap_or_else(|| now.format("%Y-%m-%dT%H:%M:%SZ").to_string());
+                research::bluesky::run(&config, &since, &until).await
             }
         },
         Command::DiscoverReasoningLevels => discover_reasoning_levels(&config).await,
