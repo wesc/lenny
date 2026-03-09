@@ -5,7 +5,7 @@ use matrix_sdk::{
     authentication::matrix::MatrixSession,
     room::Room,
     ruma::{
-        OwnedUserId,
+        OwnedEventId, OwnedUserId,
         events::{
             reaction::OriginalSyncReactionEvent,
             relation::Thread,
@@ -24,10 +24,28 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::sync::mpsc;
 use url::Url;
 
 use crate::config::{Config, RespondTo};
 use crate::{cli_bot, once};
+
+/// A message queued for debounced LLM response.
+struct PendingMessage {
+    sender: String,
+    sender_name: Option<String>,
+    body: String,
+    room_name: String,
+    room_id: String,
+    room: Room,
+    thread_root: Option<OwnedEventId>,
+    reply_to_event_id: OwnedEventId,
+    timestamp: u64,
+    sanitized_id: String,
+}
+
+/// Map of room_id → sender for queuing messages per room.
+type DebouncerMap = Arc<Mutex<HashMap<String, mpsc::UnboundedSender<PendingMessage>>>>;
 
 /// Convert a markdown string to HTML for Matrix formatted messages.
 fn markdown_to_html(md: &str) -> String {
@@ -90,6 +108,104 @@ fn is_mentioned(
     }
     // Fallback: check if body contains the bot's user ID string
     body.contains(bot_user_id.as_str())
+}
+
+/// Per-room consumer: accumulates messages, waits for 1s of quiet, then responds once.
+async fn room_debounce_consumer(
+    mut rx: mpsc::UnboundedReceiver<PendingMessage>,
+    config: Config,
+    chat_lines: Arc<Mutex<HashMap<String, Vec<String>>>>,
+) {
+    loop {
+        // Wait for the first message (blocks until one arrives or channel closes)
+        let first = match rx.recv().await {
+            Some(msg) => msg,
+            None => return,
+        };
+        let mut batch = vec![first];
+
+        // Accumulate more messages until 1s of quiet
+        loop {
+            match tokio::time::timeout(Duration::from_secs(1), rx.recv()).await {
+                Ok(Some(msg)) => batch.push(msg),
+                Ok(None) => return, // channel closed
+                Err(_) => break,    // timeout — process batch
+            }
+        }
+
+        let count = batch.len();
+        let last = batch.last().unwrap();
+        let room_name = last.room_name.clone();
+        let room = last.room.clone();
+        let thread_root = last.thread_root.clone();
+        let reply_to_event_id = last.reply_to_event_id.clone();
+        let sanitized_id = last.sanitized_id.clone();
+
+        // Build a combined prompt from all messages in the batch
+        let prompt_lines: Vec<String> = batch
+            .iter()
+            .map(|m| {
+                let display = m.sender_name.as_deref().unwrap_or(&m.sender);
+                format!(
+                    "[room: {} ({})] {} ({}): {}",
+                    m.room_name, m.room_id, display, m.sender, m.body
+                )
+            })
+            .collect();
+        let prompt = prompt_lines.join("\n");
+
+        eprintln!("Debounced {count} message(s) in {room_name}, responding to batch");
+
+        let system_dir = config.system_dir.join("matrix");
+        match once::run_prompt_with_system_dir(&config, &system_dir, &prompt).await {
+            Ok(result) if !result.skipped => {
+                let html = markdown_to_html(&result.answer);
+                let mut content = RoomMessageEventContent::text_html(&result.answer, &html);
+                if let Some(thread_root) = thread_root {
+                    content.relates_to = Some(Relation::Thread(Thread::plain(
+                        thread_root,
+                        reply_to_event_id,
+                    )));
+                }
+                let t0 = std::time::Instant::now();
+                if let Err(e) = room.send(content).await {
+                    eprintln!("Failed to send reply: {e}");
+                    continue;
+                }
+                eprintln!(
+                    "Replied in {room_name} ({:?}): {}",
+                    t0.elapsed(),
+                    &result.answer
+                );
+
+                let session_id = format!("10-matrix-{sanitized_id}");
+                // Save all user messages + the single bot reply to chat history
+                let mut lines_map = chat_lines.lock().unwrap();
+                let room_lines = lines_map.entry(session_id.clone()).or_default();
+                for m in &batch {
+                    let user_line = serde_json::to_string(&json!({
+                        "id": uuid::Uuid::new_v4().to_string(),
+                        "timestamp": m.timestamp,
+                        "sender": m.sender,
+                        "body": m.body,
+                    }))
+                    .unwrap();
+                    room_lines.push(user_line);
+                }
+                let bot_line = serde_json::to_string(&json!({
+                    "id": uuid::Uuid::new_v4().to_string(),
+                    "timestamp": chrono::Utc::now().timestamp(),
+                    "sender": "lennybot",
+                    "body": result.answer,
+                }))
+                .unwrap();
+                room_lines.push(bot_line);
+                let _ = cli_bot::save_chat_file(&config, &session_id, room_lines);
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!("Agent error for {room_name}: {e}"),
+        }
+    }
 }
 
 pub async fn run(config: &Config, reset: bool) -> Result<()> {
@@ -179,12 +295,14 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
     let out_dir = output_dir.clone();
     let config_clone = config.clone();
     let chat_lines: Arc<Mutex<HashMap<String, Vec<String>>>> = Arc::new(Mutex::new(HashMap::new()));
+    let debouncers: DebouncerMap = Arc::new(Mutex::new(HashMap::new()));
 
     client.add_event_handler(move |event: OriginalSyncRoomMessageEvent, room: Room| {
         let out_dir = out_dir.clone();
         let bot_user_id = bot_user_id.clone();
         let config = config_clone.clone();
         let chat_lines = chat_lines.clone();
+        let debouncers = debouncers.clone();
         async move {
             let room_name = room.name().unwrap_or_else(|| room.room_id().to_string());
             let sender = event.sender.to_string();
@@ -205,7 +323,6 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
 
             eprintln!("[{room_name}] {sender}: {body}");
 
-            // Spawn all heavy work (file I/O, member lookup, LLM) off the sync loop
             let respond_to = config
                 .matrix
                 .as_ref()
@@ -225,6 +342,7 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
             });
             let timestamp: u64 = event.origin_server_ts.0.into();
 
+            // Spawn off the sync loop for file I/O and member lookup
             tokio::spawn(async move {
                 let room_id = room.room_id().to_string();
                 let sender_name = room
@@ -271,61 +389,29 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
                     return;
                 }
 
-                eprintln!("Responding in {room_name} to {sender}: {body}");
+                // Queue message for debounced response
+                let msg = PendingMessage {
+                    sender,
+                    sender_name,
+                    body,
+                    room_name,
+                    room_id: room_id.clone(),
+                    room,
+                    thread_root,
+                    reply_to_event_id,
+                    timestamp,
+                    sanitized_id: sanitized_id.clone(),
+                };
 
-                let display = sender_name.as_deref().unwrap_or(&sender);
-                let prompt =
-                    format!("[room: {room_name} ({room_id})] {display} ({sender}): {body}");
-
-                let system_dir = config.system_dir.join("matrix");
-                match once::run_prompt_with_system_dir(&config, &system_dir, &prompt).await {
-                    Ok(result) if !result.skipped => {
-                        let html = markdown_to_html(&result.answer);
-                        let mut content = RoomMessageEventContent::text_html(&result.answer, &html);
-                        if let Some(thread_root) = thread_root {
-                            // Post to the thread (not a reply to a specific message)
-                            content.relates_to = Some(Relation::Thread(Thread::plain(
-                                thread_root,
-                                reply_to_event_id,
-                            )));
-                        }
-                        let t0 = std::time::Instant::now();
-                        if let Err(e) = room.send(content).await {
-                            eprintln!("Failed to send reply: {e}");
-                            return;
-                        }
-                        eprintln!(
-                            "Replied in {room_name} ({:?}): {}",
-                            t0.elapsed(),
-                            &result.answer
-                        );
-
-                        let session_id = format!("10-matrix-{sanitized_id}");
-                        let ts = chrono::Utc::now().timestamp();
-                        let user_line = serde_json::to_string(&json!({
-                            "id": uuid::Uuid::new_v4().to_string(),
-                            "timestamp": ts,
-                            "sender": sender,
-                            "body": body,
-                        }))
-                        .unwrap();
-                        let bot_line = serde_json::to_string(&json!({
-                            "id": uuid::Uuid::new_v4().to_string(),
-                            "timestamp": chrono::Utc::now().timestamp(),
-                            "sender": "lennybot",
-                            "body": result.answer,
-                        }))
-                        .unwrap();
-
-                        let mut lines_map = chat_lines.lock().unwrap();
-                        let room_lines = lines_map.entry(session_id.clone()).or_default();
-                        room_lines.push(user_line);
-                        room_lines.push(bot_line);
-                        let _ = cli_bot::save_chat_file(&config, &session_id, room_lines);
-                    }
-                    Ok(_) => {}
-                    Err(e) => eprintln!("Agent error for {room_name}: {e}"),
-                }
+                let mut map = debouncers.lock().unwrap();
+                let tx = map.entry(room_id.clone()).or_insert_with(|| {
+                    let (tx, rx) = mpsc::unbounded_channel();
+                    let config = config.clone();
+                    let chat_lines = chat_lines.clone();
+                    tokio::spawn(room_debounce_consumer(rx, config, chat_lines));
+                    tx
+                });
+                let _ = tx.send(msg);
             });
         }
     });
