@@ -8,6 +8,43 @@ use openrouter_rs::{
 
 use crate::config::Config;
 
+const MAX_RETRIES: usize = 3;
+const RETRY_BASE_DELAY_MS: u64 = 1000;
+
+/// Send a chat completion request with retries on transient errors
+/// (e.g. OpenRouter 500s returned as 200 with error body).
+macro_rules! send_with_retry {
+    ($client:expr, $request:expr) => {{
+        let mut _last_err = None;
+        let mut _result = None;
+        for _attempt in 0..MAX_RETRIES {
+            match $client.send_chat_completion($request).await {
+                Ok(response) => {
+                    _result = Some(response);
+                    break;
+                }
+                Err(e) => {
+                    let msg = e.to_string();
+                    eprintln!(
+                        "API error (attempt {}/{}): {msg}",
+                        _attempt + 1,
+                        MAX_RETRIES,
+                    );
+                    _last_err = Some(e);
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        RETRY_BASE_DELAY_MS * (1 << _attempt),
+                    ))
+                    .await;
+                }
+            }
+        }
+        match _result {
+            Some(r) => Ok(r),
+            None => Err(anyhow::anyhow!("{}", _last_err.unwrap())),
+        }
+    }};
+}
+
 // ---------------------------------------------------------------------------
 // Async tool handler
 // ---------------------------------------------------------------------------
@@ -235,7 +272,7 @@ impl<'a> Agent<'a> {
 
         hook.on_request(state.iterations, &request);
 
-        let response = self.client.send_chat_completion(&request).await?;
+        let response = send_with_retry!(self.client, &request)?;
         let choice = response
             .choices
             .first()
@@ -369,7 +406,7 @@ impl<'a> Agent<'a> {
 
         hook.on_response_phase_request(&request);
 
-        let response = self.client.send_chat_completion(&request).await?;
+        let response = send_with_retry!(self.client, &request)?;
         let choice = response
             .choices
             .first()
