@@ -110,6 +110,9 @@ pub async fn run_prompt_with_system_dir(
     user_prompt: &str,
 ) -> Result<PromptResult> {
     let preamble = context::assemble_context(system_dir, &config.dynamic_dir)?;
+    let eastern = chrono::Utc::now().with_timezone(&chrono_tz::US::Eastern);
+    let now_str = eastern.format("%A, %B %-d, %Y %-I:%M %p %Z");
+    let preamble = format!("{preamble}\n\nCurrent date/time: {now_str}");
     let reasoning_system = format!("{preamble}\n\n{TOOL_INSTRUCTIONS}\n\n{RESPONSE_INSTRUCTIONS}");
     let response_system = format!("{preamble}\n\n{RESPONSE_INSTRUCTIONS}");
 
