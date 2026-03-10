@@ -35,6 +35,10 @@ firecrawl = "1.2.1"
 pulldown-cmark = "0.13.1"
 chrono-tz = "0.10.4"
 
+[profile.dev.package.firecrawl]
+opt-level = 0
+debug-assertions = false
+
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 fastembed = { version = "5", features = ["ort-load-dynamic"] }

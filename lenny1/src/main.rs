@@ -68,6 +68,14 @@ enum Command {
         #[command(subcommand)]
         cmd: ResearchCmd,
     },
+    /// Extract information from a URL using Firecrawl
+    FirecrawlExtract {
+        /// URL to extract from
+        url: String,
+        /// Question / extraction prompt
+        #[arg(required = true, trailing_var_arg = true)]
+        prompt: Vec<String>,
+    },
     /// Estimate token counts for files in a directory or a single file
     EstimateTokens {
         /// File or directory to scan
@@ -198,6 +206,9 @@ async fn main() {
                 research::bluesky::run(&config, &since, &until).await
             }
         },
+        Command::FirecrawlExtract { url, prompt } => {
+            firecrawl_extract(&config, &url, &prompt.join(" ")).await
+        }
         Command::EstimateTokens { path } => estimate_tokens(&path),
         Command::DiscoverReasoningLevels => discover_reasoning_levels(&config).await,
     };
@@ -205,6 +216,51 @@ async fn main() {
     if let Err(e) = result {
         eprintln!("Error: {e}");
         process::exit(1);
+    }
+}
+
+async fn firecrawl_extract(config: &config::Config, url: &str, prompt: &str) -> anyhow::Result<()> {
+    let api_key = config
+        .firecrawl_api_key
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("firecrawl_api_key not set in config"))?;
+    let app = firecrawl::FirecrawlApp::new(api_key)?;
+
+    let params = firecrawl::extract::ExtractParams {
+        urls: Some(vec![url.to_string()]),
+        prompt: Some(prompt.to_string()),
+        ..Default::default()
+    };
+
+    eprintln!("Extracting from {url}...");
+    let job = app.async_extract(params).await?;
+    eprintln!("Job {} started, polling...", job.id);
+
+    loop {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let status = app.get_extract_status(&job.id).await?;
+        eprintln!(
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "status": status.status,
+                "success": status.success,
+            }))?
+        );
+        match status.status.as_str() {
+            "completed" => {
+                if let Some(data) = status.data {
+                    println!("{}", serde_json::to_string(&data)?);
+                } else {
+                    eprintln!("No data returned");
+                }
+                return Ok(());
+            }
+            "failed" => {
+                let msg = status.error.unwrap_or_else(|| "unknown error".to_string());
+                anyhow::bail!("Extract failed: {msg}");
+            }
+            _ => continue,
+        }
     }
 }
 
