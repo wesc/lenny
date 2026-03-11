@@ -1,20 +1,27 @@
 mod bluesky_trending;
 mod context_search;
+mod extract_to_note;
 mod lookup_reference;
+mod notes;
 mod random_letter;
 mod random_number;
+mod read_note;
 mod scrape_url;
 mod summarize_url;
 mod web_scrape;
+mod write_note;
 
 pub use bluesky_trending::{BlueskyTrendingTool, fetch_trending};
 pub use context_search::ContextSearchTool;
+pub use extract_to_note::ExtractToNoteTool;
 pub use lookup_reference::LookupReferenceTool;
 pub use random_letter::RandomLetterTool;
 pub use random_number::RandomNumberTool;
+pub use read_note::ReadNoteTool;
 pub use scrape_url::ScrapeUrlTool;
 pub use summarize_url::SummarizeUrlTool;
 pub use web_scrape::WebScrapeTool;
+pub use write_note::WriteNoteTool;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

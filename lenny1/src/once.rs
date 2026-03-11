@@ -12,8 +12,9 @@ use crate::agent::{Agent, ToolDef};
 use crate::config::{Config, ProviderConfig};
 use crate::context;
 use crate::tools::{
-    AgentEvent, AgentOutput, ContextSearchTool, LennyHook, LookupReferenceTool, RandomLetterTool,
-    RandomNumberTool, ScrapeUrlTool, SummarizeUrlTool, WebScrapeTool,
+    AgentEvent, AgentOutput, BlueskyTrendingTool, ContextSearchTool, ExtractToNoteTool, LennyHook,
+    LookupReferenceTool, RandomLetterTool, RandomNumberTool, ReadNoteTool, ScrapeUrlTool,
+    SummarizeUrlTool, WebScrapeTool, WriteNoteTool,
 };
 
 /// Result of running a single prompt through the agent.
@@ -75,12 +76,21 @@ fn build_tools(config: &Config) -> Vec<ToolDef> {
     let context_search = ContextSearchTool {
         db_path: config.knowledge_dir.join("comprehensions"),
     };
+    let write_note = WriteNoteTool {
+        dynamic_dir: config.dynamic_dir.clone(),
+    };
+    let read_note = ReadNoteTool {
+        dynamic_dir: config.dynamic_dir.clone(),
+    };
     let mut tools = vec![
         lookup_ref.tool_def(),
         context_search.tool_def(),
         RandomNumberTool.tool_def(),
         RandomLetterTool.tool_def(),
         WebScrapeTool.tool_def(),
+        BlueskyTrendingTool.tool_def(),
+        write_note.tool_def(),
+        read_note.tool_def(),
     ];
     if let Some(ref api_key) = config.firecrawl_api_key {
         if let Ok(firecrawl) = firecrawl::FirecrawlApp::new(api_key) {
@@ -90,7 +100,19 @@ fn build_tools(config: &Config) -> Vec<ToolDef> {
                 }
                 .tool_def(),
             );
-            tools.push(ScrapeUrlTool { firecrawl }.tool_def());
+            tools.push(
+                ScrapeUrlTool {
+                    firecrawl: firecrawl.clone(),
+                }
+                .tool_def(),
+            );
+            tools.push(
+                ExtractToNoteTool {
+                    firecrawl,
+                    dynamic_dir: config.dynamic_dir.clone(),
+                }
+                .tool_def(),
+            );
         }
     }
     tools

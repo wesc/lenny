@@ -2,6 +2,13 @@ use anyhow::Result;
 use std::fs;
 use std::path::Path;
 
+use crate::tokens::count_tokens;
+
+/// Warn when assembled context exceeds this many tokens.
+/// At 30K tokens the system prompt alone consumes ~23% of a 128K context window,
+/// leaving less room for the multi-turn conversation, tool calls, and tool results.
+const CONTEXT_TOKEN_WARN_THRESHOLD: usize = 30_000;
+
 /// Recursively collect all non-hidden file paths under `dir`.
 pub(crate) fn collect_files(dir: &Path) -> Result<Vec<std::path::PathBuf>> {
     let mut files = Vec::new();
@@ -80,6 +87,17 @@ pub fn assemble_context(system_dir: &Path, dynamic_dir: &Path) -> Result<String>
             }
             context.push('\n');
         }
+    }
+
+    let token_count = count_tokens(&context);
+    if token_count > CONTEXT_TOKEN_WARN_THRESHOLD {
+        tracing::warn!(
+            tokens = token_count,
+            threshold = CONTEXT_TOKEN_WARN_THRESHOLD,
+            "assembled context is large — may degrade tool-calling reliability"
+        );
+    } else {
+        tracing::info!(tokens = token_count, "assembled context");
     }
 
     Ok(context)

@@ -13,7 +13,7 @@ struct WebScrapeArgs {
 
 pub struct WebScrapeTool;
 
-const MAX_WORDS: usize = 8000;
+const MAX_WORDS: usize = 2000;
 
 #[async_trait]
 impl ToolHandler for WebScrapeTool {

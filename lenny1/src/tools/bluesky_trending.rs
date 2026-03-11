@@ -9,14 +9,6 @@ use crate::agent::{ToolDef, ToolHandler};
 
 const API_BASE: &str = "https://api.bsky.app/xrpc";
 
-const QUERIES: &[&str] = &[
-    "machine learning",
-    "artificial intelligence",
-    "large language model",
-    "neural network",
-    "deep learning",
-];
-
 const POSTS_PER_QUERY: u32 = 50;
 
 // ---------------------------------------------------------------------------
@@ -30,6 +22,7 @@ struct SearchResponse {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct Post {
     uri: String,
     author: Author,
@@ -43,6 +36,7 @@ struct Post {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct Author {
     handle: String,
     display_name: Option<String>,
@@ -50,6 +44,7 @@ struct Author {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct Record {
     text: String,
     created_at: Option<String>,
@@ -83,14 +78,9 @@ struct CollectedLink {
 }
 
 struct LinkPost {
-    author_handle: String,
-    author_name: Option<String>,
-    text: String,
     likes: u64,
     reposts: u64,
     quotes: u64,
-    created_at: String,
-    post_uri: String,
 }
 
 impl LinkPost {
@@ -103,15 +93,19 @@ impl LinkPost {
 // Public: fetch trending links from Bluesky
 // ---------------------------------------------------------------------------
 
-/// Fetch trending AI/ML links from Bluesky. Returns JSON value with the links.
-pub async fn fetch_trending(since: &str, until: &str) -> Result<serde_json::Value> {
+/// Fetch trending links from Bluesky for the given queries. Returns JSON value with the links.
+pub async fn fetch_trending(
+    queries: &[String],
+    since: &str,
+    until: &str,
+) -> Result<serde_json::Value> {
     let client = reqwest::Client::builder()
         .user_agent("lenny1/0.1")
         .build()?;
 
     let mut link_map: HashMap<String, CollectedLink> = HashMap::new();
 
-    for query in QUERIES {
+    for query in queries {
         let url = format!(
             "{API_BASE}/app.bsky.feed.searchPosts?q={}&sort=top&limit={POSTS_PER_QUERY}&since={since}&until={until}",
             urlencoded(query)
@@ -134,14 +128,9 @@ pub async fn fetch_trending(since: &str, until: &str) -> Result<serde_json::Valu
             }
 
             let lp = LinkPost {
-                author_handle: post.author.handle,
-                author_name: post.author.display_name,
-                text: post.record.text,
                 likes: post.like_count.unwrap_or(0),
                 reposts: post.repost_count.unwrap_or(0),
                 quotes: post.quote_count.unwrap_or(0),
-                created_at: post.record.created_at.unwrap_or(post.indexed_at),
-                post_uri: post.uri,
             };
 
             let entry = link_map
@@ -168,34 +157,22 @@ pub async fn fetch_trending(since: &str, until: &str) -> Result<serde_json::Valu
 
     let items: Vec<serde_json::Value> = links
         .iter()
-        .take(30)
+        .take(15)
         .map(|link| {
             let total_engagement: u64 = link.posts.iter().map(|p| p.engagement()).sum();
-            let top_post = &link.posts[0];
             json!({
                 "url": link.url,
                 "title": link.title,
                 "description": link.description,
-                "total_engagement": total_engagement,
-                "shared_by_count": link.posts.len(),
-                "top_post": {
-                    "author": top_post.author_name.as_deref()
-                        .unwrap_or(&top_post.author_handle),
-                    "handle": top_post.author_handle,
-                    "text": top_post.text,
-                    "likes": top_post.likes,
-                    "reposts": top_post.reposts,
-                    "quotes": top_post.quotes,
-                    "created_at": top_post.created_at,
-                    "uri": top_post.post_uri,
-                },
+                "engagement": total_engagement,
+                "shares": link.posts.len(),
             })
         })
         .collect();
 
     Ok(json!({
         "source": "bluesky",
-        "queries": QUERIES,
+        "queries": queries,
         "since": since,
         "until": until,
         "fetched_at": chrono::Utc::now().to_rfc3339(),
@@ -210,6 +187,7 @@ pub async fn fetch_trending(since: &str, until: &str) -> Result<serde_json::Valu
 
 #[derive(Debug, Deserialize)]
 struct BlueskyTrendingArgs {
+    queries: Vec<String>,
     #[serde(default)]
     since: Option<String>,
     #[serde(default)]
@@ -244,7 +222,7 @@ impl ToolHandler for BlueskyTrendingTool {
 
         tracing::debug!(since = %since, until = %until, "bluesky_trending: fetching");
 
-        let output = fetch_trending(&since, &until).await?;
+        let output = fetch_trending(&args.queries, &since, &until).await?;
         Ok(serde_json::to_string_pretty(&output)?)
     }
 }
@@ -254,10 +232,15 @@ impl BlueskyTrendingTool {
         ToolDef {
             tool: Tool::new(
                 "bluesky_trending",
-                "Search Bluesky for trending AI/ML links. Returns a JSON object with top shared links ranked by engagement. Optionally filter by date range.",
+                "Search Bluesky for trending links matching the given keywords. Returns a JSON object with top shared links ranked by engagement. Each query is searched separately and results are merged and ranked.",
                 json!({
                     "type": "object",
                     "properties": {
+                        "queries": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Keywords to search for (e.g. [\"rust programming\", \"cargo build system\"]). Each string is a separate search query."
+                        },
                         "since": {
                             "type": "string",
                             "description": "Start date (YYYY-MM-DD). Defaults to 24 hours ago."
@@ -267,7 +250,7 @@ impl BlueskyTrendingTool {
                             "description": "End date (YYYY-MM-DD). Defaults to now."
                         }
                     },
-                    "required": []
+                    "required": ["queries"]
                 }),
             ),
             handler: Box::new(self),

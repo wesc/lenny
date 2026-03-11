@@ -10,6 +10,7 @@ mod evals;
 mod matrix_bot;
 mod once;
 mod research;
+mod tokens;
 mod tools;
 
 use clap::{Parser, Subcommand};
@@ -265,10 +266,6 @@ async fn firecrawl_extract(config: &config::Config, url: &str, prompt: &str) -> 
 }
 
 fn estimate_tokens(path: &Path) -> anyhow::Result<()> {
-    fn approx_tokens(text: &str) -> usize {
-        text.split_whitespace().count()
-    }
-
     fn collect_files(path: &Path, files: &mut Vec<PathBuf>) -> anyhow::Result<()> {
         if path.is_file() {
             files.push(path.to_path_buf());
@@ -298,7 +295,7 @@ fn estimate_tokens(path: &Path) -> anyhow::Result<()> {
             Ok(c) => c,
             Err(_) => continue, // skip binary / unreadable files
         };
-        let tokens = approx_tokens(&content);
+        let tokens = tokens::count_tokens(&content);
         total += tokens;
         println!("{tokens:>8}  {}", file.display());
     }

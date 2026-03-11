@@ -9,4 +9,5 @@ pub mod evals;
 pub mod matrix_bot;
 pub mod once;
 pub mod research;
+pub mod tokens;
 pub mod tools;

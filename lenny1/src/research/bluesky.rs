@@ -60,7 +60,17 @@ pub async fn run(config: &Config, since: &str, until: &str) -> Result<()> {
 
     // Step 1: Fetch trending data directly (not via agent) so we can save the raw output
     eprintln!("  Fetching trending links...");
-    let trending = crate::tools::fetch_trending(since, until).await?;
+    let default_queries: Vec<String> = [
+        "machine learning",
+        "artificial intelligence",
+        "large language model",
+        "neural network",
+        "deep learning",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let trending = crate::tools::fetch_trending(&default_queries, since, until).await?;
     let link_count = trending["link_count"].as_u64().unwrap_or(0);
     eprintln!("  Found {link_count} trending links");
 
