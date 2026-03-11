@@ -2,7 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use firecrawl::FirecrawlApp;
 use firecrawl::scrape::{ScrapeFormats, ScrapeOptions};
-use openrouter_rs::types::Tool;
+use rig::completion::ToolDefinition;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -60,10 +60,12 @@ impl ToolHandler for ScrapeUrlTool {
 impl ScrapeUrlTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: Tool::new(
-                "scrape_url",
-                "Scrape a web page using Firecrawl and return its content as markdown.",
-                json!({
+            tool: ToolDefinition {
+                name: "scrape_url".to_string(),
+                description:
+                    "Scrape a web page using Firecrawl and return its content as markdown."
+                        .to_string(),
+                parameters: json!({
                     "type": "object",
                     "properties": {
                         "url": {
@@ -73,7 +75,7 @@ impl ScrapeUrlTool {
                     },
                     "required": ["url"]
                 }),
-            ),
+            },
             handler: Box::new(self),
         }
     }

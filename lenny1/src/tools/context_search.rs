@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use openrouter_rs::types::Tool;
+use rig::completion::ToolDefinition;
 use serde::Deserialize;
 use serde_json::json;
 use std::path::PathBuf;
@@ -61,11 +61,12 @@ impl ToolHandler for ContextSearchTool {
 impl ContextSearchTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: Tool::new(
-                "context_search",
-                "Search past conversations and documents by semantic similarity. \
-                 Optionally filter by a time range. Returns relevant context passages.",
-                json!({
+            tool: ToolDefinition {
+                name: "context_search".to_string(),
+                description: "Search past conversations and documents by semantic similarity. \
+                     Optionally filter by a time range. Returns relevant context passages."
+                    .to_string(),
+                parameters: json!({
                     "type": "object",
                     "properties": {
                         "query": {
@@ -83,7 +84,7 @@ impl ContextSearchTool {
                     },
                     "required": ["query"]
                 }),
-            ),
+            },
             handler: Box::new(self),
         }
     }

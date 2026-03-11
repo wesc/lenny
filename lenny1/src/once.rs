@@ -1,15 +1,15 @@
 use anyhow::{Result, anyhow};
-use openrouter_rs::{
-    OpenRouterClient,
-    api::chat::{ChatCompletionRequest, Message, Plugin},
-    types::{ResponseFormat, Role},
+use rig::OneOrMany;
+use rig::completion::{
+    CompletionModel as CompletionModelTrait, CompletionRequest, message::AssistantContent,
 };
+use rig::providers::openrouter;
 use serde::de::DeserializeOwned;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::agent::{Agent, ToolDef};
-use crate::config::{Config, ProviderConfig};
+use crate::agent::{self, Agent, Message, ToolDef};
+use crate::config::Config;
 use crate::context;
 use crate::tools::{
     AgentEvent, AgentOutput, BlueskyTrendingTool, ContextSearchTool, ExtractToNoteTool, LennyHook,
@@ -62,11 +62,6 @@ fn prompt_log_path_for(config: &Config) -> Option<PathBuf> {
             .unwrap_or(&config.dynamic_dir)
             .join("prompt-log.txt"),
     )
-}
-
-fn build_client(config: &Config) -> Result<OpenRouterClient> {
-    let ProviderConfig::OpenRouter { ref api_key, .. } = config.provider;
-    Ok(OpenRouterClient::builder().api_key(api_key).build()?)
 }
 
 fn build_tools(config: &Config) -> Vec<ToolDef> {
@@ -138,7 +133,7 @@ pub async fn run_prompt_with_system_dir(
     let reasoning_system = format!("{preamble}\n\n{TOOL_INSTRUCTIONS}\n\n{RESPONSE_INSTRUCTIONS}");
     let response_system = format!("{preamble}\n\n{RESPONSE_INSTRUCTIONS}");
 
-    let client = build_client(config)?;
+    let client = agent::build_client(config)?;
     let tools = build_tools(config);
     let prompt_log_path = prompt_log_path_for(config);
 
@@ -186,28 +181,47 @@ pub async fn run_completion_typed<T: DeserializeOwned + Send>(
     preamble: &str,
     prompt: &str,
 ) -> Result<T> {
-    let client = build_client(config)?;
-    let model = config.provider.response_model();
+    let client = agent::build_client(config)?;
+    let model_name = config.provider.response_model();
 
-    let request = ChatCompletionRequest::builder()
-        .model(model)
-        .messages(vec![
-            Message::new(Role::System, preamble),
-            Message::new(Role::User, prompt),
-        ])
-        .response_format(ResponseFormat::json_object())
-        .plugins(vec![Plugin::new("response-healing")])
-        .max_tokens(1024u32)
-        .build()?;
+    let model = openrouter::CompletionModel::new(client, model_name);
 
-    let response = client.send_chat_completion(&request).await?;
-    let choice = response
-        .choices
-        .first()
-        .ok_or_else(|| anyhow!("no choices in response"))?;
+    let request = CompletionRequest {
+        model: None,
+        preamble: Some(preamble.to_string()),
+        chat_history: OneOrMany::one(Message::user(prompt)),
+        documents: vec![],
+        tools: vec![],
+        temperature: None,
+        max_tokens: None,
+        tool_choice: None,
+        additional_params: Some(serde_json::json!({
+            "max_tokens": 1024,
+            "response_format": {"type": "json_object"},
+            "plugins": [{"id": "response-healing"}],
+        })),
+        output_schema: None,
+    };
 
-    let raw = choice.content().unwrap_or("");
-    parse_json_response(raw)
+    let response = model
+        .completion(request)
+        .await
+        .map_err(|e| anyhow!("completion error: {e}"))?;
+
+    let raw = response
+        .choice
+        .iter()
+        .filter_map(|c| {
+            if let AssistantContent::Text(t) = c {
+                Some(t.text.as_str())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("");
+
+    parse_json_response(&raw)
 }
 
 /// The `once` CLI command: run prompt, print JSON, save turn.

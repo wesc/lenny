@@ -1,11 +1,10 @@
 use anyhow::Result;
 use firecrawl::FirecrawlApp;
-use openrouter_rs::OpenRouterClient;
 use serde::Deserialize;
 use std::fs;
 
-use crate::agent::{Agent, ToolDef};
-use crate::config::{Config, ProviderConfig};
+use crate::agent::{self, Agent, ToolDef};
+use crate::config::Config;
 use crate::tools::{BlueskyTrendingTool, ScrapeUrlTool};
 
 #[derive(Debug, Deserialize)]
@@ -54,8 +53,7 @@ pub async fn run(config: &Config, since: &str, until: &str) -> Result<()> {
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("firecrawl_api_key is required for deep research"))?;
 
-    let ProviderConfig::OpenRouter { ref api_key, .. } = config.provider;
-    let client = OpenRouterClient::builder().api_key(api_key).build()?;
+    let client = agent::build_client(config)?;
     let firecrawl = FirecrawlApp::new(firecrawl_api_key)?;
 
     // Step 1: Fetch trending data directly (not via agent) so we can save the raw output

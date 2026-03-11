@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use openrouter_rs::types::Tool;
+use rig::completion::ToolDefinition;
 use serde_json::json;
 
 use crate::agent::{ToolDef, ToolHandler};
@@ -20,14 +20,14 @@ impl ToolHandler for RandomLetterTool {
 impl RandomLetterTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: Tool::new(
-                "random_letter",
-                "Generate a random lowercase letter (a-z).",
-                json!({
+            tool: ToolDefinition {
+                name: "random_letter".to_string(),
+                description: "Generate a random lowercase letter (a-z).".to_string(),
+                parameters: json!({
                     "type": "object",
                     "properties": {}
                 }),
-            ),
+            },
             handler: Box::new(self),
         }
     }

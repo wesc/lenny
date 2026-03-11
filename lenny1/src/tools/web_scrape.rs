@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use openrouter_rs::types::Tool;
+use rig::completion::ToolDefinition;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -58,10 +58,12 @@ impl ToolHandler for WebScrapeTool {
 impl WebScrapeTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: Tool::new(
-                "web_scrape",
-                "Fetch a web page and return its content as markdown. Use this to read URLs.",
-                json!({
+            tool: ToolDefinition {
+                name: "web_scrape".to_string(),
+                description:
+                    "Fetch a web page and return its content as markdown. Use this to read URLs."
+                        .to_string(),
+                parameters: json!({
                     "type": "object",
                     "properties": {
                         "url": {
@@ -71,7 +73,7 @@ impl WebScrapeTool {
                     },
                     "required": ["url"]
                 }),
-            ),
+            },
             handler: Box::new(self),
         }
     }

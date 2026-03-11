@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use openrouter_rs::types::Tool;
+use rig::completion::ToolDefinition;
 use serde::Deserialize;
 use serde_json::json;
 use std::path::PathBuf;
@@ -35,10 +35,10 @@ impl ToolHandler for ReadNoteTool {
 impl ReadNoteTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: Tool::new(
-                "read_note",
-                "Read a note file from the notes directory. Use this to read back accumulated research or other notes you have previously written.",
-                json!({
+            tool: ToolDefinition {
+                name: "read_note".to_string(),
+                description: "Read a note file from the notes directory. Use this to read back accumulated research or other notes you have previously written.".to_string(),
+                parameters: json!({
                     "type": "object",
                     "properties": {
                         "filename": {
@@ -48,7 +48,7 @@ impl ReadNoteTool {
                     },
                     "required": ["filename"]
                 }),
-            ),
+            },
             handler: Box::new(self),
         }
     }

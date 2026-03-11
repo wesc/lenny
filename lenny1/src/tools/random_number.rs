@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use openrouter_rs::types::Tool;
+use rig::completion::ToolDefinition;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -36,10 +36,11 @@ impl ToolHandler for RandomNumberTool {
 impl RandomNumberTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: Tool::new(
-                "random_number",
-                "Generate a random integer between min and max (inclusive).",
-                json!({
+            tool: ToolDefinition {
+                name: "random_number".to_string(),
+                description: "Generate a random integer between min and max (inclusive)."
+                    .to_string(),
+                parameters: json!({
                     "type": "object",
                     "properties": {
                         "min": { "type": "integer", "description": "Minimum value (inclusive)" },
@@ -47,7 +48,7 @@ impl RandomNumberTool {
                     },
                     "required": ["min", "max"]
                 }),
-            ),
+            },
             handler: Box::new(self),
         }
     }

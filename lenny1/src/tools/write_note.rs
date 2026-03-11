@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use openrouter_rs::types::Tool;
+use rig::completion::ToolDefinition;
 use serde::Deserialize;
 use serde_json::json;
 use std::path::PathBuf;
@@ -40,10 +40,10 @@ impl ToolHandler for WriteNoteTool {
 impl WriteNoteTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: Tool::new(
-                "write_note",
-                "Write a note or report to a file in the notes directory (overwrites if exists). Use this to save final reports or any information worth remembering long-term. The file will be automatically incorporated into the knowledge base over time.",
-                json!({
+            tool: ToolDefinition {
+                name: "write_note".to_string(),
+                description: "Write a note or report to a file in the notes directory (overwrites if exists). Use this to save final reports or any information worth remembering long-term. The file will be automatically incorporated into the knowledge base over time.".to_string(),
+                parameters: json!({
                     "type": "object",
                     "properties": {
                         "filename": {
@@ -57,7 +57,7 @@ impl WriteNoteTool {
                     },
                     "required": ["filename", "content"]
                 }),
-            ),
+            },
             handler: Box::new(self),
         }
     }

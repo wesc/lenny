@@ -305,15 +305,11 @@ fn estimate_tokens(path: &Path) -> anyhow::Result<()> {
 }
 
 async fn discover_reasoning_levels(config: &config::Config) -> anyhow::Result<()> {
-    use config::ProviderConfig;
-    use openrouter_rs::OpenRouterClient;
-
     if config.model_candidates.is_empty() {
         anyhow::bail!("No model_candidates configured");
     }
 
-    let ProviderConfig::OpenRouter { ref api_key, .. } = config.provider;
-    let client = OpenRouterClient::builder().api_key(api_key).build()?;
+    let client = agent::build_client(config)?;
 
     eprintln!(
         "Probing {} model(s) for reasoning effort support...\n",

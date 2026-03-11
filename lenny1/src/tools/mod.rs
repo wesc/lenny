@@ -89,11 +89,7 @@ pub struct LennyHook {
 }
 
 impl agent::AgentHook for LennyHook {
-    fn on_request(
-        &mut self,
-        _iteration: usize,
-        request: &openrouter_rs::api::chat::ChatCompletionRequest,
-    ) {
+    fn on_request(&mut self, _iteration: usize, request: &rig::completion::CompletionRequest) {
         if let Some(path) = &self.prompt_log_path {
             let mut out = String::new();
             if let Some(preamble) = &self.preamble {
@@ -101,7 +97,9 @@ impl agent::AgentHook for LennyHook {
                 out.push_str(preamble);
                 out.push_str("\n\n");
             }
-            if let Ok(json) = serde_json::to_string_pretty(request) {
+            // CompletionRequest doesn't implement Serialize, so log a summary
+            let summary = agent::RequestSummary::from(request);
+            if let Ok(json) = serde_json::to_string_pretty(&summary) {
                 out.push_str("[REQUEST]\n");
                 out.push_str(&json);
                 out.push_str("\n\n");

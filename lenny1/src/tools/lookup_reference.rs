@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 use async_trait::async_trait;
-use openrouter_rs::types::Tool;
+use rig::completion::ToolDefinition;
 use serde::Deserialize;
 use serde_json::json;
 use std::path::{Component, Path, PathBuf};
@@ -78,10 +78,10 @@ impl ToolHandler for LookupReferenceTool {
 impl LookupReferenceTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: Tool::new(
-                "lookup_reference",
-                "Look up a reference file by its relative path within the references directory. Returns the file contents.",
-                json!({
+            tool: ToolDefinition {
+                name: "lookup_reference".to_string(),
+                description: "Look up a reference file by its relative path within the references directory. Returns the file contents.".to_string(),
+                parameters: json!({
                     "type": "object",
                     "properties": {
                         "path": {
@@ -91,7 +91,7 @@ impl LookupReferenceTool {
                     },
                     "required": ["path"]
                 }),
-            ),
+            },
             handler: Box::new(self),
         }
     }

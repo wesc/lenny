@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use firecrawl::FirecrawlApp;
-use openrouter_rs::types::Tool;
+use rig::completion::ToolDefinition;
 use serde::Deserialize;
 use serde_json::json;
 use std::path::PathBuf;
@@ -71,10 +71,10 @@ impl ToolHandler for ExtractToNoteTool {
 impl ExtractToNoteTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: Tool::new(
-                "extract_to_note",
-                "Extract information from a URL by asking a question about it, and append the result to a note file. Uses Firecrawl's extract API. The extracted content goes directly to the file without entering conversation context, keeping token usage low. Use this for research pipelines where you need to gather information from multiple URLs.",
-                json!({
+            tool: ToolDefinition {
+                name: "extract_to_note".to_string(),
+                description: "Extract information from a URL by asking a question about it, and append the result to a note file. Uses Firecrawl's extract API. The extracted content goes directly to the file without entering conversation context, keeping token usage low. Use this for research pipelines where you need to gather information from multiple URLs.".to_string(),
+                parameters: json!({
                     "type": "object",
                     "properties": {
                         "url": {
@@ -92,7 +92,7 @@ impl ExtractToNoteTool {
                     },
                     "required": ["url", "prompt", "filename"]
                 }),
-            ),
+            },
             handler: Box::new(self),
         }
     }

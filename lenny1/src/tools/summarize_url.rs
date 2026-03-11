@@ -2,7 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use firecrawl::FirecrawlApp;
 use firecrawl::scrape::{ScrapeFormats, ScrapeOptions};
-use openrouter_rs::types::Tool;
+use rig::completion::ToolDefinition;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -61,10 +61,10 @@ impl ToolHandler for SummarizeUrlTool {
 impl SummarizeUrlTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: Tool::new(
-                "summarize_url",
-                "Fetch a web page using Firecrawl and return its main content as markdown for summarization. Use this to read and summarize URLs.",
-                json!({
+            tool: ToolDefinition {
+                name: "summarize_url".to_string(),
+                description: "Fetch a web page using Firecrawl and return its main content as markdown for summarization. Use this to read and summarize URLs.".to_string(),
+                parameters: json!({
                     "type": "object",
                     "properties": {
                         "url": {
@@ -74,7 +74,7 @@ impl SummarizeUrlTool {
                     },
                     "required": ["url"]
                 }),
-            ),
+            },
             handler: Box::new(self),
         }
     }

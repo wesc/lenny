@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use openrouter_rs::types::Tool;
+use rig::completion::ToolDefinition;
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::HashMap;
@@ -230,10 +230,10 @@ impl ToolHandler for BlueskyTrendingTool {
 impl BlueskyTrendingTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: Tool::new(
-                "bluesky_trending",
-                "Search Bluesky for trending links matching the given keywords. Returns a JSON object with top shared links ranked by engagement. Each query is searched separately and results are merged and ranked.",
-                json!({
+            tool: ToolDefinition {
+                name: "bluesky_trending".to_string(),
+                description: "Search Bluesky for trending links matching the given keywords. Returns a JSON object with top shared links ranked by engagement. Each query is searched separately and results are merged and ranked.".to_string(),
+                parameters: json!({
                     "type": "object",
                     "properties": {
                         "queries": {
@@ -252,7 +252,7 @@ impl BlueskyTrendingTool {
                     },
                     "required": ["queries"]
                 }),
-            ),
+            },
             handler: Box::new(self),
         }
     }
