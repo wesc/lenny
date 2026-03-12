@@ -292,17 +292,22 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
 
     let bot_user_id = client.user_id().expect("should be logged in").to_owned();
 
+    // Session timestamp for dynamic/ filenames (YYYY-MM-DD_HH-MM-SS format)
+    let session_ts = chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+
     let out_dir = output_dir.clone();
     let config_clone = config.clone();
     let chat_lines: Arc<Mutex<HashMap<String, Vec<String>>>> = Arc::new(Mutex::new(HashMap::new()));
     let debouncers: DebouncerMap = Arc::new(Mutex::new(HashMap::new()));
 
+    let session_ts_msg = session_ts.clone();
     client.add_event_handler(move |event: OriginalSyncRoomMessageEvent, room: Room| {
         let out_dir = out_dir.clone();
         let bot_user_id = bot_user_id.clone();
         let config = config_clone.clone();
         let chat_lines = chat_lines.clone();
         let debouncers = debouncers.clone();
+        let session_ts = session_ts_msg.clone();
         async move {
             let room_name = room.name().unwrap_or_else(|| room.room_id().to_string());
             let sender = event.sender.to_string();
@@ -364,11 +369,12 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
 
                 let sanitized_name = sanitize_room_name(&room_name);
                 let sanitized_id = sanitize_room_name(&room_id);
-                let filename = if sanitized_name.is_empty() || sanitized_name == sanitized_id {
-                    format!("{sanitized_id}.json")
+                let room_slug = if sanitized_name.is_empty() || sanitized_name == sanitized_id {
+                    sanitized_id.clone()
                 } else {
-                    format!("{sanitized_id}-{sanitized_name}.json")
+                    format!("{sanitized_id}-{sanitized_name}")
                 };
+                let filename = format!("{session_ts}_{room_slug}.json");
                 let path = out_dir.join(&filename);
                 if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&path) {
                     let _ = writeln!(file, "{line}");
@@ -418,8 +424,10 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
 
     // Reaction handler: log emoji reactions to the same NDJSON files
     let out_dir2 = output_dir.clone();
+    let session_ts_react = session_ts.clone();
     client.add_event_handler(move |event: OriginalSyncReactionEvent, room: Room| {
         let out_dir = out_dir2.clone();
+        let session_ts = session_ts_react.clone();
         async move {
             let room_name = room.name().unwrap_or_else(|| room.room_id().to_string());
             let sender = event.sender.to_string();
@@ -446,11 +454,12 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
 
                 let sanitized_name = sanitize_room_name(&room_name);
                 let sanitized_id = sanitize_room_name(&room_id);
-                let filename = if sanitized_name.is_empty() || sanitized_name == sanitized_id {
-                    format!("{sanitized_id}.json")
+                let room_slug = if sanitized_name.is_empty() || sanitized_name == sanitized_id {
+                    sanitized_id
                 } else {
-                    format!("{sanitized_id}-{sanitized_name}.json")
+                    format!("{sanitized_id}-{sanitized_name}")
                 };
+                let filename = format!("{session_ts}_{room_slug}.json");
                 let path = out_dir.join(&filename);
                 if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&path) {
                     let _ = writeln!(file, "{line}");

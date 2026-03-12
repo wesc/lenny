@@ -15,6 +15,8 @@ pub enum ProviderConfig {
         reasoning_model: Option<String>,
         #[serde(default)]
         response_model: Option<String>,
+        #[serde(default)]
+        comprehension_model: Option<String>,
     },
 }
 
@@ -27,6 +29,7 @@ impl ProviderConfig {
             model: Some("test-model".to_string()),
             reasoning_model: None,
             response_model: None,
+            comprehension_model: None,
         }
     }
 
@@ -38,6 +41,17 @@ impl ProviderConfig {
             ..
         } = self;
         (model, reasoning_model, response_model)
+    }
+
+    /// Model for fact extraction / comprehension. Falls back to `response_model()`.
+    pub fn comprehension_model(&self) -> &str {
+        let ProviderConfig::OpenRouter {
+            comprehension_model,
+            ..
+        } = self;
+        comprehension_model
+            .as_deref()
+            .unwrap_or_else(|| self.response_model())
     }
 
     #[allow(dead_code)]
@@ -174,8 +188,8 @@ impl Config {
         self.knowledge_dir.join("references")
     }
 
-    pub fn comprehensions_dir(&self) -> PathBuf {
-        self.knowledge_dir.join("comprehensions")
+    pub fn memory_db(&self) -> PathBuf {
+        self.knowledge_dir.join("memory.db")
     }
 
     pub fn load(path: &Path) -> Result<Self> {

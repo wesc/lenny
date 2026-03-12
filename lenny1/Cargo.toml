@@ -34,6 +34,7 @@ firecrawl = "1.2.1"
 pulldown-cmark = "0.13.1"
 chrono-tz = "0.10.4"
 tiktoken-rs = "0.9.1"
+llm_json = "1.0.2"
 
 [profile.dev.package.firecrawl]
 opt-level = 0

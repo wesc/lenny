@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::json;
 use std::path::PathBuf;
 
-use crate::actions::comprehension;
+use crate::actions::fact;
 use crate::agent::{ToolDef, ToolHandler};
 
 #[derive(Debug, Deserialize)]
@@ -48,7 +48,8 @@ impl ToolHandler for ContextSearchTool {
             "context search"
         );
 
-        let result = comprehension::retrieve(&self.db_path, &args.query, 5, time_range).await?;
+        let _ = time_range; // reserved for future use
+        let result = fact::retrieve(&self.db_path, &args.query, 5).await?;
 
         if result.context.is_empty() {
             Ok("No relevant context found.".to_string())

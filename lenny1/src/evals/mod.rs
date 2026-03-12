@@ -1,6 +1,8 @@
+pub mod all;
 pub mod contextual_all;
 pub mod contextual_chats;
 pub mod contextual_texts;
+pub mod fact;
 
 use anyhow::Result;
 use regex::Regex;

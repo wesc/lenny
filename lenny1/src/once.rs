@@ -69,7 +69,7 @@ fn build_tools(config: &Config) -> Vec<ToolDef> {
         references_dir: config.references_dir(),
     };
     let context_search = ContextSearchTool {
-        db_path: config.knowledge_dir.join("comprehensions"),
+        db_path: config.memory_db(),
     };
     let write_note = WriteNoteTool {
         dynamic_dir: config.dynamic_dir.clone(),
@@ -173,17 +173,25 @@ pub async fn run_prompt_with_system_dir(
     }
 }
 
-/// Simple completion: no tools, no hooks. For internal use (e.g. comprehension).
-/// Uses the response model for a single non-agentic call.
-/// Sends json_object + response-healing to guarantee valid JSON.
+/// Simple completion using the response model. No tools, no hooks.
 pub async fn run_completion_typed<T: DeserializeOwned + Send>(
     config: &Config,
     preamble: &str,
     prompt: &str,
 ) -> Result<T> {
-    let client = agent::build_client(config)?;
-    let model_name = config.provider.response_model();
+    run_completion_typed_with_model(config, config.provider.response_model(), preamble, prompt)
+        .await
+}
 
+/// Simple completion with an explicit model name. No tools, no hooks.
+/// Sends json_object + response-healing to guarantee valid JSON.
+pub async fn run_completion_typed_with_model<T: DeserializeOwned + Send>(
+    config: &Config,
+    model_name: &str,
+    preamble: &str,
+    prompt: &str,
+) -> Result<T> {
+    let client = agent::build_client(config)?;
     let model = openrouter::CompletionModel::new(client, model_name);
 
     let request = CompletionRequest {
@@ -253,29 +261,14 @@ fn parse_agent_output(raw: &str) -> Result<AgentOutput> {
 }
 
 /// Parse JSON from an LLM response into T.
-/// Relies on provider-level structured output (OpenRouter json_object + response-healing)
-/// to guarantee valid JSON. Falls back to trimming markdown fences.
+/// Uses llm_json to repair malformed JSON from LLMs (missing quotes,
+/// trailing commas, prose wrapping, markdown fences, etc).
 fn parse_json_response<T: DeserializeOwned>(raw: &str) -> Result<T> {
-    // First try direct parse (works when provider enforces JSON schema)
-    if let Ok(val) = serde_json::from_str(raw.trim()) {
-        return Ok(val);
-    }
-    // Fallback: strip markdown code fences
-    let trimmed = raw.trim();
-    let json_str = if trimmed.starts_with("```") {
-        let after_first = trimmed
-            .strip_prefix("```json")
-            .or_else(|| trimmed.strip_prefix("```"))
-            .unwrap_or(trimmed);
-        after_first
-            .strip_suffix("```")
-            .unwrap_or(after_first)
-            .trim()
-    } else {
-        trimmed
-    };
-    serde_json::from_str(json_str)
-        .map_err(|e| anyhow!("Failed to parse LLM response as JSON: {e}\nRaw response: {raw}"))
+    let repaired = llm_json::repair_json(raw, &llm_json::RepairOptions::default())
+        .map_err(|e| anyhow!("Failed to repair LLM JSON: {e}\nRaw response: {raw}"))?;
+    serde_json::from_str(&repaired).map_err(|e| {
+        anyhow!("Failed to parse repaired JSON: {e}\nRepaired: {repaired}\nRaw: {raw}")
+    })
 }
 
 pub fn sanitize_slug(s: &str) -> String {
@@ -326,4 +319,75 @@ fn save_turn(config: &Config, prompt: &str, result: &PromptResult) -> Result<()>
 
     eprintln!("Saved turn: {}", final_path.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct Simple {
+        answer: String,
+    }
+
+    #[test]
+    fn parse_clean_json() {
+        let r: Simple = parse_json_response(r#"{"answer": "hello"}"#).unwrap();
+        assert_eq!(r.answer, "hello");
+    }
+
+    #[test]
+    fn parse_with_whitespace() {
+        let r: Simple = parse_json_response("  \n{\"answer\": \"hello\"}\n  ").unwrap();
+        assert_eq!(r.answer, "hello");
+    }
+
+    #[test]
+    fn parse_markdown_fences() {
+        let input = "```json\n{\"answer\": \"hello\"}\n```";
+        let r: Simple = parse_json_response(input).unwrap();
+        assert_eq!(r.answer, "hello");
+    }
+
+    #[test]
+    fn parse_leading_prose() {
+        let input = "Here is the result:\n{\"answer\": \"hello\"}";
+        let r: Simple = parse_json_response(input).unwrap();
+        assert_eq!(r.answer, "hello");
+    }
+
+    #[test]
+    fn parse_trailing_prose() {
+        let input = "{\"answer\": \"hello\"}\n\nI hope that helps!";
+        let r: Simple = parse_json_response(input).unwrap();
+        assert_eq!(r.answer, "hello");
+    }
+
+    #[test]
+    fn parse_leading_and_trailing_prose() {
+        let input = "Sure! Here you go:\n{\"answer\": \"hello\"}\nLet me know if you need more.";
+        let r: Simple = parse_json_response(input).unwrap();
+        assert_eq!(r.answer, "hello");
+    }
+
+    #[test]
+    fn parse_nested_braces_in_string() {
+        let input = r#"{"answer": "use {x} for templating"}"#;
+        let r: Simple = parse_json_response(input).unwrap();
+        assert_eq!(r.answer, "use {x} for templating");
+    }
+
+    #[test]
+    fn parse_escaped_quotes() {
+        let input = r#"{"answer": "she said \"hi\""}"#;
+        let r: Simple = parse_json_response(input).unwrap();
+        assert_eq!(r.answer, "she said \"hi\"");
+    }
+
+    #[test]
+    fn parse_fails_on_garbage() {
+        let result: Result<Simple> = parse_json_response("not json at all");
+        assert!(result.is_err());
+    }
 }

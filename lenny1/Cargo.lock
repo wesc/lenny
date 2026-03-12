@@ -2731,6 +2731,7 @@ dependencies = [
  "firecrawl",
  "futures-util",
  "html-to-markdown-rs",
+ "llm_json",
  "matrix-sdk",
  "notify-debouncer-full",
  "openssl",
@@ -2811,6 +2812,17 @@ name = "litemap"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6373607a59f0be73a39b6fe456b8192fcc3585f602af20751600e974dd455e77"
+
+[[package]]
+name = "llm_json"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d6a0ee634dc2211a67b3ee239fac8098647352fc73a39b50c57fbf7fb7a2928"
+dependencies = [
+ "clap",
+ "serde_json",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "lock_api"

@@ -40,9 +40,9 @@ enum Command {
     },
     /// Watch system/, dynamic/, and references/ for changes
     Dream {
-        /// Force comprehension immediately without waiting for token thresholds
+        /// Force fact digest immediately without waiting for token thresholds
         #[arg(long)]
-        force_comprehension: bool,
+        force_digest: bool,
     },
     /// Run eval suites
     Eval {
@@ -59,10 +59,10 @@ enum Command {
         #[command(subcommand)]
         cmd: CliCmd,
     },
-    /// Comprehension index operations
-    Comprehension {
+    /// Fact memory operations
+    Fact {
         #[command(subcommand)]
-        cmd: ComprehensionCmd,
+        cmd: FactCmd,
     },
     /// Run research tasks
     Research {
@@ -109,6 +109,10 @@ enum EvalSuite {
     ContextualTexts,
     /// Run both contextual eval suites (chats + texts)
     ContextualAll,
+    /// Run fact extraction + retrieval eval suite
+    Fact,
+    /// Run all eval suites (basic, contextual, fact)
+    All,
 }
 
 #[derive(Subcommand)]
@@ -128,10 +132,14 @@ enum CliCmd {
 }
 
 #[derive(Subcommand)]
-enum ComprehensionCmd {
-    /// Dump all comprehension entries as JSON
-    Dump,
-    /// Search comprehensions by semantic similarity
+enum FactCmd {
+    /// Run one pass of fact extraction over dynamic/ files
+    Digest {
+        /// Force extraction without waiting for token thresholds
+        #[arg(long)]
+        force: bool,
+    },
+    /// Search facts by semantic similarity
     Search {
         /// The search query
         #[arg(required = true, trailing_var_arg = true)]
@@ -140,6 +148,8 @@ enum ComprehensionCmd {
         #[arg(short, long, default_value = "5")]
         n: usize,
     },
+    /// Dump all facts as JSON
+    Dump,
 }
 
 #[tokio::main]
@@ -160,14 +170,14 @@ async fn main() {
             let prompt = prompt.join(" ");
             once::run(&config, &prompt).await
         }
-        Command::Dream {
-            force_comprehension,
-        } => dream::run(&config, force_comprehension).await,
+        Command::Dream { force_digest } => dream::run(&config, force_digest).await,
         Command::Eval { suite } => match suite {
             EvalSuite::Basic => evals::run(&config).await,
             EvalSuite::ContextualChats => evals::contextual_chats::run(&config).await,
             EvalSuite::ContextualTexts => evals::contextual_texts::run(&config).await,
             EvalSuite::ContextualAll => evals::contextual_all::run(&config).await,
+            EvalSuite::Fact => evals::fact::run(&config).await,
+            EvalSuite::All => evals::all::run(&config).await,
         },
         Command::Matrix { cmd } => match cmd {
             MatrixCmd::Bot { reset } => matrix_bot::run(&config, reset).await,
@@ -180,12 +190,13 @@ async fn main() {
                 cli_bot::chat_loop(&config, &mut input, &mut output).await
             }
         },
-        Command::Comprehension { cmd } => match cmd {
-            ComprehensionCmd::Dump => actions::comprehension::dump_json(&config).await,
-            ComprehensionCmd::Search { query, n } => {
+        Command::Fact { cmd } => match cmd {
+            FactCmd::Digest { force } => actions::fact::run(&config, force).await.map(|_| ()),
+            FactCmd::Search { query, n } => {
                 let query = query.join(" ");
-                actions::comprehension::search_json(&config, &query, n).await
+                actions::fact::search_json(&config, &query, n).await
             }
+            FactCmd::Dump => actions::fact::dump_json(&config).await,
         },
         Command::Research { cmd } => match cmd {
             ResearchCmd::Bluesky { since, until } => {

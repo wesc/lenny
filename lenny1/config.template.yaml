@@ -5,6 +5,7 @@ provider:
   # --- or dual-model mode ---
   # reasoning_model: "openai/gpt-oss-120b:nitro"  # tool-calling phase
   # response_model: "google/gemini-2.5-flash-lite" # final answer phase
+  # comprehension_model: "google/gemini-2.5-flash-lite"  # fact extraction model
 
 max_iterations: 5
 

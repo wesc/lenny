@@ -15,7 +15,7 @@ pub async fn chat_loop<R: BufRead, W: Write>(
     input: &mut R,
     output: &mut W,
 ) -> Result<()> {
-    let session_id = format!("cli-{}", chrono::Utc::now().format("%Y%m%d-%H%M%S"));
+    let session_id = format!("{}_cli", chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S"));
     let mut lines: Vec<String> = Vec::new();
 
     loop {

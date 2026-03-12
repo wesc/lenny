@@ -1,0 +1,8 @@
+Project Alpha is our main product initiative for Q1 2026. The deadline is March 15, 2026.
+The project lead is Sarah Chen. The engineering team includes Marcus, Priya, and Jake.
+The tech stack for Project Alpha is Rust for the backend and React for the frontend.
+We are using PostgreSQL as the primary database, with Redis for caching.
+The project goal is to build a real-time collaboration platform for distributed teams.
+Sprint planning happens every Monday at 10am Eastern. Demo day is every other Friday.
+The staging environment is at staging.projectalpha.internal and production is at app.projectalpha.com.
+The project budget is $450,000 for the quarter.

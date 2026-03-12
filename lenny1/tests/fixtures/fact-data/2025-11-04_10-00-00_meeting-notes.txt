@@ -1,0 +1,9 @@
+Meeting notes from November 15, 2025, attendees: Sarah, Marcus, Priya, Jake, and the assistant.
+Sarah announced that the board approved the Q1 2026 budget for Project Alpha.
+Marcus raised a concern about the database migration timeline. He estimated it would take 3 weeks.
+Priya demonstrated the new React component library she built. The team agreed to adopt it.
+Jake reported that the Kubernetes cluster migration is 80% complete. Expected done by end of November.
+Action item: Marcus will prepare a detailed migration plan by November 22.
+Action item: Priya will document the component library API by December 1.
+The team decided to postpone the mobile app until Q2 2026 to focus on the web platform.
+Next meeting scheduled for November 22, 2025 at the same time.

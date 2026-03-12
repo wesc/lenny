@@ -13,14 +13,14 @@ fn is_hidden_path(path: &Path) -> bool {
         .any(|c| c.as_os_str().to_string_lossy().starts_with('.'))
 }
 
-pub async fn run(config: &Config, force_comprehension: bool) -> Result<()> {
-    // Run comprehension at startup
-    if actions::comprehension::run(config, force_comprehension).await? {
-        eprintln!("Initial comprehension completed");
+pub async fn run(config: &Config, force_digest: bool) -> Result<()> {
+    // Run fact digest at startup
+    if actions::fact::run(config, force_digest).await? {
+        eprintln!("Initial fact digest completed");
     }
 
-    if force_comprehension {
-        eprintln!("Force comprehension completed, exiting.");
+    if force_digest {
+        eprintln!("Force digest completed, exiting.");
         return Ok(());
     }
 
@@ -56,9 +56,9 @@ pub async fn run(config: &Config, force_comprehension: bool) -> Result<()> {
                     .iter()
                     .any(|e| e.event.paths.iter().any(|p| !is_hidden_path(p)));
                 if has_relevant {
-                    eprintln!("Changes detected, running comprehension...");
-                    if let Err(e) = actions::comprehension::run(config, false).await {
-                        eprintln!("Comprehension error: {e}");
+                    eprintln!("Changes detected, running fact digest...");
+                    if let Err(e) = actions::fact::run(config, false).await {
+                        eprintln!("Fact digest error: {e}");
                     }
                 }
             }

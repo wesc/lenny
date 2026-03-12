@@ -43,7 +43,7 @@ fn collect_files_recursive(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> R
 /// Assemble context from system and dynamic directories.
 /// Returns a single string with section markers for each file.
 /// Order: system → dynamic, each sorted by relative path.
-/// Knowledge (comprehensions + references) is accessed via RAG, not assembled here.
+/// Knowledge (facts + references) is accessed via RAG, not assembled here.
 pub fn assemble_context(system_dir: &Path, dynamic_dir: &Path) -> Result<String> {
     let mut system_files = collect_files(system_dir)?;
     let mut dynamic_files = collect_files(dynamic_dir)?;

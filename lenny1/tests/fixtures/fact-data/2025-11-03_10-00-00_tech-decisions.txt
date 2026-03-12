@@ -1,0 +1,8 @@
+We chose PostgreSQL over MySQL because of its better JSON support and full-text search capabilities.
+The team decided to use gRPC instead of REST for internal service communication due to performance requirements.
+We selected Kubernetes for container orchestration after evaluating Docker Swarm and Nomad.
+Authentication is handled by Auth0. We considered building our own but decided the maintenance burden was too high.
+The CI/CD pipeline runs on GitHub Actions. We migrated from Jenkins in December 2025.
+For monitoring, we use Grafana dashboards backed by Prometheus metrics and Loki for log aggregation.
+We adopted the trunk-based development model. All feature branches must be merged within 48 hours.
+The API versioning strategy uses URL path prefixes (e.g., /v1/, /v2/).
