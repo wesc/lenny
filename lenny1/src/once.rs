@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use crate::agent::{self, Agent, Message, ToolDef};
 use crate::config::Config;
 use crate::context;
+use crate::session::{self, SessionId};
 use crate::tools::{
     AgentEvent, AgentOutput, BlueskyTrendingTool, ContextSearchTool, ExtractToNoteTool, LennyHook,
     LookupReferenceTool, RandomLetterTool, RandomNumberTool, ReadNoteTool, ScrapeUrlTool,
@@ -116,61 +117,114 @@ fn build_tools(config: &Config) -> Vec<ToolDef> {
 /// Run a prompt through the agent and return structured result (no printing).
 /// Uses the base `config.system_dir`. For channel-specific system prompts,
 /// use `run_prompt_with_system_dir`.
-pub async fn run_prompt(config: &Config, user_prompt: &str) -> Result<PromptResult> {
-    run_prompt_with_system_dir(config, &config.system_dir, user_prompt).await
+pub async fn run_prompt(
+    config: &Config,
+    session_id: &SessionId,
+    user_prompt: &str,
+) -> Result<PromptResult> {
+    run_prompt_with_system_dir(config, &config.system_dir, session_id, user_prompt).await
 }
 
 /// Run a prompt with a custom system directory for context assembly.
+/// Loads session history + documents from disk, runs agent, persists the turn.
 pub async fn run_prompt_with_system_dir(
     config: &Config,
     system_dir: &Path,
+    session_id: &SessionId,
     user_prompt: &str,
 ) -> Result<PromptResult> {
-    let preamble = context::assemble_context(system_dir, &config.dynamic_dir)?;
+    // Step 1: Assemble system prompt (no dynamic files — those are now documents)
+    let preamble = context::assemble_system_prompt(system_dir)?;
     let eastern = chrono::Utc::now().with_timezone(&chrono_tz::US::Eastern);
     let now_str = eastern.format("%A, %B %-d, %Y %-I:%M %p %Z");
     let preamble = format!("{preamble}\n\nCurrent date/time: {now_str}");
     let reasoning_system = format!("{preamble}\n\n{TOOL_INSTRUCTIONS}\n\n{RESPONSE_INSTRUCTIONS}");
     let response_system = format!("{preamble}\n\n{RESPONSE_INSTRUCTIONS}");
 
+    // Step 2: Load session state from disk
+    let session_ctx = session::load_session(&config.dynamic_dir, session_id)?;
+
     let client = agent::build_client(config)?;
     let tools = build_tools(config);
     let prompt_log_path = prompt_log_path_for(config);
 
-    let state = crate::tools::AgentState::new();
+    let hook_state = crate::tools::AgentState::new();
 
     let agent = Agent::builder(&client, config)
         .system(&reasoning_system)
         .response_system(&response_system)
         .tools(&tools)
+        .documents(session_ctx.documents)
         .build();
 
     let mut hook = LennyHook {
-        state: state.clone(),
+        state: hook_state.clone(),
         prompt_log_path,
         preamble: Some(reasoning_system.clone()),
     };
 
-    let result = agent.run(user_prompt, &mut hook).await?;
+    // Step 3: Run agent with history from disk
+    let result = agent
+        .run(user_prompt, session_ctx.history, &mut hook)
+        .await?;
     let output: AgentOutput = parse_agent_output(&result.answer)?;
 
-    let events = std::mem::take(&mut state.lock().unwrap().events);
+    let events = std::mem::take(&mut hook_state.lock().unwrap().events);
+
+    let slug = if output.no_response {
+        "no-response".to_string()
+    } else {
+        sanitize_slug(&output.slug)
+    };
+
+    // Step 4: Persist turn to session directory
+    // Only save the new messages from this run (not the full history which is already on disk)
+    let new_messages = extract_new_messages(&result.messages, user_prompt);
+    if let Err(e) = session::save_turn(&config.dynamic_dir, session_id, &new_messages, &slug) {
+        tracing::warn!(error = %e, "failed to save session turn");
+    }
 
     if output.no_response {
         Ok(PromptResult {
             answer: output.answer,
-            slug: "no-response".to_string(),
+            slug,
             skipped: true,
             events,
         })
     } else {
         Ok(PromptResult {
             answer: output.answer,
-            slug: sanitize_slug(&output.slug),
+            slug,
             skipped: false,
             events,
         })
     }
+}
+
+/// Extract only the new messages produced during this run.
+/// History messages are already persisted; we only want the user prompt + assistant turns.
+fn extract_new_messages(all_messages: &[Message], user_prompt: &str) -> Vec<Message> {
+    // Find the last user message matching the prompt — everything from there onwards is new.
+    // Walk backwards to find it.
+    for (i, msg) in all_messages.iter().enumerate().rev() {
+        if let Message::User { content } = msg {
+            let text: String = content
+                .iter()
+                .filter_map(|c| {
+                    if let rig::completion::message::UserContent::Text(t) = c {
+                        Some(t.text.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if text == user_prompt {
+                return all_messages[i..].to_vec();
+            }
+        }
+    }
+    // Fallback: return all messages
+    all_messages.to_vec()
 }
 
 /// Simple completion using the response model. No tools, no hooks.
@@ -234,7 +288,8 @@ pub async fn run_completion_typed_with_model<T: DeserializeOwned + Send>(
 
 /// The `once` CLI command: run prompt, print JSON, save turn.
 pub async fn run(config: &Config, user_prompt: &str) -> Result<()> {
-    let result = run_prompt(config, user_prompt).await?;
+    let session_id = SessionId::new("once", "default");
+    let result = run_prompt(config, &session_id, user_prompt).await?;
 
     let tool_calls: Vec<&AgentEvent> = result
         .events
@@ -251,7 +306,7 @@ pub async fn run(config: &Config, user_prompt: &str) -> Result<()> {
     });
     println!("{}", serde_json::to_string_pretty(&output)?);
 
-    save_turn(config, user_prompt, &result)?;
+    save_turn_to_references(config, user_prompt, &result)?;
     Ok(())
 }
 
@@ -281,7 +336,8 @@ pub fn sanitize_slug(s: &str) -> String {
         .collect()
 }
 
-fn save_turn(config: &Config, prompt: &str, result: &PromptResult) -> Result<()> {
+/// Save turn to references/turns/ for backward compatibility with fact digest.
+fn save_turn_to_references(config: &Config, prompt: &str, result: &PromptResult) -> Result<()> {
     let turns_dir = config.references_dir().join("turns");
     fs::create_dir_all(&turns_dir)?;
 

@@ -13,6 +13,7 @@ use std::time::Instant;
 use crate::config::Config;
 use crate::contextual_indexer::RetrieveResult;
 use crate::once::{self, PromptResult};
+use crate::session::SessionId;
 use crate::tools::AgentEvent;
 
 // ---------------------------------------------------------------------------
@@ -478,7 +479,8 @@ pub async fn run(base_config: &Config) -> Result<()> {
         eprint!("  {} ... ", eval.name);
 
         let eval_start = Instant::now();
-        let outcome = match once::run_prompt(&config, eval.prompt).await {
+        let eval_session = SessionId::new("evals", eval.name);
+        let outcome = match once::run_prompt(&config, &eval_session, eval.prompt).await {
             Ok(result) => {
                 let elapsed = eval_start.elapsed().as_secs_f64();
                 let (pass, reason) = (eval.check)(&result);

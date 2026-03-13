@@ -99,7 +99,7 @@ pub async fn run(config: &Config, since: &str, until: &str) -> Result<()> {
 
     eprintln!("  Running deep research agent...");
     let mut hook = ResearchHook;
-    let result = agent.run(&prompt, &mut hook).await?;
+    let result = agent.run(&prompt, vec![], &mut hook).await?;
 
     // Parse the summary from agent response
     let output: ResearchOutput = serde_json::from_str(result.answer.trim())

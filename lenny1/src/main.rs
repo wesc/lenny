@@ -10,6 +10,7 @@ mod evals;
 mod matrix_bot;
 mod once;
 mod research;
+mod session;
 mod tokens;
 mod tools;
 

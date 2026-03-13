@@ -1,22 +1,24 @@
 use anyhow::Result;
-use std::fs;
 use std::io::{BufRead, Write};
 
 use crate::config::Config;
 use crate::once;
+use crate::session::SessionId;
 
 /// Run an interactive chat loop, reading from `input` and writing to `output`.
 ///
 /// Each line triggers a fresh agent call via `once::run_prompt`. Chat history
-/// is persisted as NDJSON to `dynamic/cli/{session_id}.json` so it appears
-/// directly in assembled context.
+/// is persisted as session NDJSON files by `run_prompt`, so it appears in
+/// the agent's context on subsequent turns.
 pub async fn chat_loop<R: BufRead, W: Write>(
     config: &Config,
     input: &mut R,
     output: &mut W,
 ) -> Result<()> {
-    let session_id = format!("{}_cli", chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S"));
-    let mut lines: Vec<String> = Vec::new();
+    let session_name = chrono::Utc::now()
+        .format("%Y-%m-%d_%H-%M-%S_cli")
+        .to_string();
+    let session_id = SessionId::new("cli", &session_name);
 
     loop {
         write!(output, "> ")?;
@@ -32,75 +34,20 @@ pub async fn chat_loop<R: BufRead, W: Write>(
             break;
         }
 
-        let ts = chrono::Utc::now().timestamp();
         let system_dir = config.system_dir.join("cli");
-        let result = match once::run_prompt_with_system_dir(config, &system_dir, line).await {
-            Ok(r) => r,
-            Err(e) => {
-                writeln!(output, "\n\x1b[38;5;245m[no response: {e}]\x1b[0m\n")?;
-                continue;
-            }
-        };
-
-        lines.push(serde_json::to_string(&serde_json::json!({
-            "id": uuid::Uuid::new_v4().to_string(),
-            "timestamp": ts,
-            "sender": "user",
-            "body": line,
-        }))?);
+        let result =
+            match once::run_prompt_with_system_dir(config, &system_dir, &session_id, line).await {
+                Ok(r) => r,
+                Err(e) => {
+                    writeln!(output, "\n\x1b[38;5;245m[no response: {e}]\x1b[0m\n")?;
+                    continue;
+                }
+            };
 
         if !result.skipped {
             writeln!(output, "\n\x1b[38;5;245m{}\x1b[0m\n", result.answer)?;
-
-            lines.push(serde_json::to_string(&serde_json::json!({
-                "id": uuid::Uuid::new_v4().to_string(),
-                "timestamp": chrono::Utc::now().timestamp(),
-                "sender": "lennybot",
-                "body": result.answer,
-            }))?);
         }
-
-        save_dynamic_chat(config, "cli", &session_id, &lines)?;
     }
-
-    Ok(())
-}
-
-/// Atomically write accumulated NDJSON chat lines to `references/chats/{session_id}.json`.
-pub fn save_chat_file(config: &Config, session_id: &str, lines: &[String]) -> Result<()> {
-    let chats_dir = config.references_dir().join("chats");
-    fs::create_dir_all(&chats_dir)?;
-
-    let content = lines.join("\n") + "\n";
-
-    let tmp_name = format!(".tmp-{}", uuid::Uuid::new_v4());
-    let tmp_path = chats_dir.join(&tmp_name);
-    let final_path = chats_dir.join(format!("{session_id}.json"));
-
-    fs::write(&tmp_path, &content)?;
-    fs::rename(&tmp_path, &final_path)?;
-
-    Ok(())
-}
-
-/// Atomically write accumulated NDJSON chat lines to `dynamic/{subdir}/{session_id}.json`.
-pub fn save_dynamic_chat(
-    config: &Config,
-    subdir: &str,
-    session_id: &str,
-    lines: &[String],
-) -> Result<()> {
-    let target_dir = config.dynamic_dir.join(subdir);
-    fs::create_dir_all(&target_dir)?;
-
-    let content = lines.join("\n") + "\n";
-
-    let tmp_name = format!(".tmp-{}", uuid::Uuid::new_v4());
-    let tmp_path = target_dir.join(&tmp_name);
-    let final_path = target_dir.join(format!("{session_id}.json"));
-
-    fs::write(&tmp_path, &content)?;
-    fs::rename(&tmp_path, &final_path)?;
 
     Ok(())
 }

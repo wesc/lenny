@@ -9,6 +9,8 @@ use rig::message::ToolChoice;
 use rig::providers::openrouter;
 use serde::Serialize;
 
+use rig::completion::request::Document;
+
 use crate::config::Config;
 
 /// Re-export rig's Message type for use across the codebase.
@@ -105,6 +107,9 @@ pub struct RunResult {
     pub tool_context: String,
     /// Number of assistant turns in the reasoning loop.
     pub reasoning_turns: usize,
+    /// All messages produced during this run (user input + assistant + tool results).
+    /// Used for disk persistence by the session module.
+    pub messages: Vec<Message>,
 }
 
 /// What a single `once()` iteration produced.
@@ -202,6 +207,8 @@ pub struct Agent<'a> {
     /// System prompt for the response phase (no tool instructions). Falls back to `system`.
     response_system: Option<&'a str>,
     tool_defs: &'a [ToolDef],
+    /// Documents to include in completion requests (general knowledge from dynamic/).
+    documents: Vec<Document>,
     max_iterations: usize,
     reasoning_max_tokens: u64,
     response_max_tokens: u64,
@@ -216,6 +223,7 @@ pub struct AgentBuilder<'a> {
     system: &'a str,
     response_system: Option<&'a str>,
     tool_defs: &'a [ToolDef],
+    documents: Vec<Document>,
     max_iterations: usize,
     reasoning_max_tokens: u64,
     response_max_tokens: u64,
@@ -251,6 +259,11 @@ impl<'a> AgentBuilder<'a> {
         self
     }
 
+    pub fn documents(mut self, documents: Vec<Document>) -> Self {
+        self.documents = documents;
+        self
+    }
+
     pub fn build(self) -> Agent<'a> {
         Agent {
             client: self.client,
@@ -259,6 +272,7 @@ impl<'a> AgentBuilder<'a> {
             system: self.system,
             response_system: self.response_system,
             tool_defs: self.tool_defs,
+            documents: self.documents,
             max_iterations: self.max_iterations,
             reasoning_max_tokens: self.reasoning_max_tokens,
             response_max_tokens: self.response_max_tokens,
@@ -276,6 +290,7 @@ impl<'a> Agent<'a> {
             system: "",
             response_system: None,
             tool_defs: &[],
+            documents: vec![],
             max_iterations: config.max_iterations,
             reasoning_max_tokens: 2048,
             response_max_tokens: 1024,
@@ -306,7 +321,7 @@ impl<'a> Agent<'a> {
             model: Some(self.reasoning_model.to_string()),
             preamble: Some(state.preamble.clone()),
             chat_history,
-            documents: vec![],
+            documents: self.documents.clone(),
             tools,
             temperature: None,
             max_tokens: None,
@@ -387,8 +402,25 @@ impl<'a> Agent<'a> {
     }
 
     /// Run full reasoning loop + response phase.
-    pub async fn run(&self, prompt: &str, hook: &mut dyn AgentHook) -> Result<RunResult> {
+    ///
+    /// `history` is prepended to messages (previous turns from disk).
+    /// The user prompt is appended after history.
+    pub async fn run(
+        &self,
+        prompt: &str,
+        history: Vec<Message>,
+        hook: &mut dyn AgentHook,
+    ) -> Result<RunResult> {
         let mut state = AgentState::new(self.system, prompt);
+
+        // Prepend history before the user prompt
+        if !history.is_empty() {
+            let user_msg = state.messages.pop(); // the user prompt we just added
+            state.messages = history;
+            if let Some(msg) = user_msg {
+                state.messages.push(msg);
+            }
+        }
 
         loop {
             let outcome = self.once(&mut state, hook).await?;
@@ -415,6 +447,7 @@ impl<'a> Agent<'a> {
             tool_events: state.tool_events,
             tool_context,
             reasoning_turns,
+            messages: state.messages,
         })
     }
 

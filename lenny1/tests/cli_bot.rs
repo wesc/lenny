@@ -1,214 +1,97 @@
-use lenny1::cli_bot::{save_chat_file, save_dynamic_chat};
-use lenny1::config::{Config, ProviderConfig};
+use lenny1::agent::Message;
+use lenny1::session::{self, SessionId};
 use std::fs;
 
-fn make_config(tmpdir: &tempfile::TempDir) -> Config {
-    Config {
-        provider: ProviderConfig::test_default(),
-        max_iterations: 1,
-        system_dir: tmpdir.path().join("system"),
-        dynamic_dir: tmpdir.path().join("dynamic"),
-        knowledge_dir: tmpdir.path().join("knowledge"),
-        max_context_tokens: 4000,
-        min_context_tokens: 2000,
-        matrix: None,
-        min_score_range: 2.0,
-        score_gap_threshold: 0.5,
-        prompt_log: false,
-        model_candidates: Vec::new(),
-        firecrawl_api_key: None,
-    }
-}
+#[test]
+fn session_save_and_load_round_trip() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let dynamic_dir = tmpdir.path();
+    let session_id = SessionId::new("cli", "test-session");
 
-fn chat_line(ts: i64, sender: &str, body: &str) -> String {
-    serde_json::to_string(&serde_json::json!({
-        "timestamp": ts,
-        "sender": sender,
-        "body": body,
-    }))
-    .unwrap()
+    let messages = vec![Message::user("hello"), Message::assistant("hi there")];
+
+    let path = session::save_turn(dynamic_dir, &session_id, &messages, "greeting").unwrap();
+    assert!(path.exists());
+    assert!(path.to_string_lossy().ends_with(".ndjson"));
+
+    let ctx = session::load_session(dynamic_dir, &session_id).unwrap();
+    assert_eq!(ctx.history.len(), 2);
+    assert!(ctx.documents.is_empty());
 }
 
 #[test]
-fn writes_valid_ndjson() {
+fn session_creates_dir() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let config = make_config(&tmpdir);
+    let dynamic_dir = tmpdir.path();
+    let session_id = SessionId::new("cli", "mkdir-test");
 
-    let lines = vec![
-        chat_line(1740000000, "user", "hello"),
-        chat_line(1740000001, "lennybot", "hi there"),
-    ];
+    assert!(!dynamic_dir.join("cli/mkdir-test").exists());
 
-    save_chat_file(&config, "cli-test", &lines).unwrap();
+    let messages = vec![Message::user("hi")];
+    session::save_turn(dynamic_dir, &session_id, &messages, "test").unwrap();
 
-    let path = config.references_dir().join("chats/cli-test.json");
-    let content = fs::read_to_string(&path).unwrap();
-    let parsed: Vec<serde_json::Value> = content
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .map(|l| serde_json::from_str(l).unwrap())
-        .collect();
-
-    assert_eq!(parsed.len(), 2);
-    assert_eq!(parsed[0]["sender"], "user");
-    assert_eq!(parsed[0]["body"], "hello");
-    assert_eq!(parsed[0]["timestamp"], 1740000000);
-    assert_eq!(parsed[1]["sender"], "lennybot");
-    assert_eq!(parsed[1]["body"], "hi there");
-    assert_eq!(parsed[1]["timestamp"], 1740000001);
+    assert!(dynamic_dir.join("cli/mkdir-test").exists());
 }
 
 #[test]
-fn accumulates_lines() {
+fn session_atomic_write_no_temp_files() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let config = make_config(&tmpdir);
+    let dynamic_dir = tmpdir.path();
+    let session_id = SessionId::new("cli", "atomic-test");
 
-    let mut lines = vec![
-        chat_line(1740000000, "user", "first"),
-        chat_line(1740000001, "lennybot", "reply1"),
-    ];
-    save_chat_file(&config, "cli-accum", &lines).unwrap();
+    let messages = vec![Message::user("hello"), Message::assistant("world")];
+    session::save_turn(dynamic_dir, &session_id, &messages, "test").unwrap();
 
-    let path = config.references_dir().join("chats/cli-accum.json");
-    let content = fs::read_to_string(&path).unwrap();
-    let count = content.lines().filter(|l| !l.trim().is_empty()).count();
-    assert_eq!(count, 2);
-
-    // Add more lines and rewrite
-    lines.push(chat_line(1740000010, "user", "second"));
-    lines.push(chat_line(1740000011, "lennybot", "reply2"));
-    save_chat_file(&config, "cli-accum", &lines).unwrap();
-
-    let content = fs::read_to_string(&path).unwrap();
-    let count = content.lines().filter(|l| !l.trim().is_empty()).count();
-    assert_eq!(count, 4);
-}
-
-#[test]
-fn creates_chats_dir() {
-    let tmpdir = tempfile::tempdir().unwrap();
-    let config = make_config(&tmpdir);
-
-    // references/chats/ does not exist yet
-    assert!(!config.references_dir().join("chats").exists());
-
-    let lines = vec![chat_line(1740000000, "user", "hi")];
-    save_chat_file(&config, "cli-mkdir", &lines).unwrap();
-
-    assert!(
-        config
-            .references_dir()
-            .join("chats/cli-mkdir.json")
-            .exists()
-    );
-}
-
-#[test]
-fn atomic_write_no_temp_files_left() {
-    let tmpdir = tempfile::tempdir().unwrap();
-    let config = make_config(&tmpdir);
-
-    let lines = vec![
-        chat_line(1740000000, "user", "hello"),
-        chat_line(1740000001, "lennybot", "world"),
-    ];
-    save_chat_file(&config, "cli-atomic", &lines).unwrap();
-
-    let chats_dir = config.references_dir().join("chats");
-    let entries: Vec<_> = fs::read_dir(&chats_dir)
+    let session_dir = dynamic_dir.join("cli/atomic-test");
+    let entries: Vec<_> = fs::read_dir(&session_dir)
         .unwrap()
         .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
         .collect();
 
-    // Only the final file should exist, no .tmp- leftovers
+    // Only the final .ndjson file should exist, no .tmp- leftovers
     assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0], "cli-atomic.json");
-}
-
-// --- save_dynamic_chat tests ---
-
-#[test]
-fn dynamic_writes_valid_ndjson() {
-    let tmpdir = tempfile::tempdir().unwrap();
-    let config = make_config(&tmpdir);
-
-    let lines = vec![
-        chat_line(1740000000, "user", "hello"),
-        chat_line(1740000001, "lennybot", "hi there"),
-    ];
-
-    save_dynamic_chat(&config, "cli", "cli-test", &lines).unwrap();
-
-    let path = config.dynamic_dir.join("cli/cli-test.json");
-    let content = fs::read_to_string(&path).unwrap();
-    let parsed: Vec<serde_json::Value> = content
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .map(|l| serde_json::from_str(l).unwrap())
-        .collect();
-
-    assert_eq!(parsed.len(), 2);
-    assert_eq!(parsed[0]["sender"], "user");
-    assert_eq!(parsed[0]["body"], "hello");
-    assert_eq!(parsed[1]["sender"], "lennybot");
-    assert_eq!(parsed[1]["body"], "hi there");
+    assert!(entries[0].ends_with(".ndjson"));
+    assert!(!entries[0].starts_with(".tmp"));
 }
 
 #[test]
-fn dynamic_accumulates_lines() {
+fn session_accumulates_turns() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let config = make_config(&tmpdir);
+    let dynamic_dir = tmpdir.path();
+    let session_id = SessionId::new("cli", "accum-test");
 
-    let mut lines = vec![
-        chat_line(1740000000, "user", "first"),
-        chat_line(1740000001, "lennybot", "reply1"),
-    ];
-    save_dynamic_chat(&config, "cli", "cli-accum", &lines).unwrap();
+    // First turn
+    let messages1 = vec![Message::user("first"), Message::assistant("reply1")];
+    session::save_turn(dynamic_dir, &session_id, &messages1, "turn1").unwrap();
 
-    let path = config.dynamic_dir.join("cli/cli-accum.json");
-    let content = fs::read_to_string(&path).unwrap();
-    let count = content.lines().filter(|l| !l.trim().is_empty()).count();
-    assert_eq!(count, 2);
+    let ctx = session::load_session(dynamic_dir, &session_id).unwrap();
+    assert_eq!(ctx.history.len(), 2);
 
-    lines.push(chat_line(1740000010, "user", "second"));
-    lines.push(chat_line(1740000011, "lennybot", "reply2"));
-    save_dynamic_chat(&config, "cli", "cli-accum", &lines).unwrap();
+    // Second turn
+    let messages2 = vec![Message::user("second"), Message::assistant("reply2")];
+    session::save_turn(dynamic_dir, &session_id, &messages2, "turn2").unwrap();
 
-    let content = fs::read_to_string(&path).unwrap();
-    let count = content.lines().filter(|l| !l.trim().is_empty()).count();
-    assert_eq!(count, 4);
+    let ctx = session::load_session(dynamic_dir, &session_id).unwrap();
+    assert_eq!(ctx.history.len(), 4);
 }
 
 #[test]
-fn dynamic_creates_subdir() {
+fn session_documents_exclude_session_dir() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let config = make_config(&tmpdir);
+    let dynamic_dir = tmpdir.path();
+    let session_id = SessionId::new("cli", "doc-test");
 
-    assert!(!config.dynamic_dir.join("cli").exists());
+    // Save a session turn
+    let messages = vec![Message::user("hello")];
+    session::save_turn(dynamic_dir, &session_id, &messages, "test").unwrap();
 
-    let lines = vec![chat_line(1740000000, "user", "hi")];
-    save_dynamic_chat(&config, "cli", "cli-mkdir", &lines).unwrap();
+    // Create a non-session file
+    let notes_dir = dynamic_dir.join("notes");
+    fs::create_dir_all(&notes_dir).unwrap();
+    fs::write(notes_dir.join("note.md"), "some note content").unwrap();
 
-    assert!(config.dynamic_dir.join("cli/cli-mkdir.json").exists());
-}
-
-#[test]
-fn dynamic_atomic_write_no_temp_files_left() {
-    let tmpdir = tempfile::tempdir().unwrap();
-    let config = make_config(&tmpdir);
-
-    let lines = vec![
-        chat_line(1740000000, "user", "hello"),
-        chat_line(1740000001, "lennybot", "world"),
-    ];
-    save_dynamic_chat(&config, "cli", "cli-atomic", &lines).unwrap();
-
-    let target_dir = config.dynamic_dir.join("cli");
-    let entries: Vec<_> = fs::read_dir(&target_dir)
-        .unwrap()
-        .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
-        .collect();
-
-    assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0], "cli-atomic.json");
+    let ctx = session::load_session(dynamic_dir, &session_id).unwrap();
+    assert_eq!(ctx.history.len(), 1);
+    assert_eq!(ctx.documents.len(), 1);
+    assert_eq!(ctx.documents[0].id, "notes/note.md");
 }

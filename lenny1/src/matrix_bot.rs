@@ -28,9 +28,11 @@ use tokio::sync::mpsc;
 use url::Url;
 
 use crate::config::{Config, RespondTo};
-use crate::{cli_bot, once};
+use crate::once;
+use crate::session::SessionId;
 
 /// A message queued for debounced LLM response.
+#[allow(dead_code)]
 struct PendingMessage {
     sender: String,
     sender_name: Option<String>,
@@ -111,10 +113,11 @@ fn is_mentioned(
 }
 
 /// Per-room consumer: accumulates messages, waits for 1s of quiet, then responds once.
+/// Session persistence is handled by `run_prompt_with_system_dir`.
 async fn room_debounce_consumer(
     mut rx: mpsc::UnboundedReceiver<PendingMessage>,
     config: Config,
-    chat_lines: Arc<Mutex<HashMap<String, Vec<String>>>>,
+    host: String,
 ) {
     loop {
         // Wait for the first message (blocks until one arrives or channel closes)
@@ -156,8 +159,10 @@ async fn room_debounce_consumer(
 
         eprintln!("Debounced {count} message(s) in {room_name}, responding to batch");
 
+        // Session ID per room: matrix/{host}/{room_slug}
+        let session_id = SessionId::new(&format!("matrix/{host}"), &sanitized_id);
         let system_dir = config.system_dir.join("matrix");
-        match once::run_prompt_with_system_dir(&config, &system_dir, &prompt).await {
+        match once::run_prompt_with_system_dir(&config, &system_dir, &session_id, &prompt).await {
             Ok(result) if !result.skipped => {
                 let html = markdown_to_html(&result.answer);
                 let mut content = RoomMessageEventContent::text_html(&result.answer, &html);
@@ -177,30 +182,6 @@ async fn room_debounce_consumer(
                     t0.elapsed(),
                     &result.answer
                 );
-
-                let session_id = format!("10-matrix-{sanitized_id}");
-                // Save all user messages + the single bot reply to chat history
-                let mut lines_map = chat_lines.lock().unwrap();
-                let room_lines = lines_map.entry(session_id.clone()).or_default();
-                for m in &batch {
-                    let user_line = serde_json::to_string(&json!({
-                        "id": uuid::Uuid::new_v4().to_string(),
-                        "timestamp": m.timestamp,
-                        "sender": m.sender,
-                        "body": m.body,
-                    }))
-                    .unwrap();
-                    room_lines.push(user_line);
-                }
-                let bot_line = serde_json::to_string(&json!({
-                    "id": uuid::Uuid::new_v4().to_string(),
-                    "timestamp": chrono::Utc::now().timestamp(),
-                    "sender": "lennybot",
-                    "body": result.answer,
-                }))
-                .unwrap();
-                room_lines.push(bot_line);
-                let _ = cli_bot::save_chat_file(&config, &session_id, room_lines);
             }
             Ok(_) => {}
             Err(e) => eprintln!("Agent error for {room_name}: {e}"),
@@ -297,7 +278,6 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
 
     let out_dir = output_dir.clone();
     let config_clone = config.clone();
-    let chat_lines: Arc<Mutex<HashMap<String, Vec<String>>>> = Arc::new(Mutex::new(HashMap::new()));
     let debouncers: DebouncerMap = Arc::new(Mutex::new(HashMap::new()));
 
     let session_ts_msg = session_ts.clone();
@@ -305,9 +285,9 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
         let out_dir = out_dir.clone();
         let bot_user_id = bot_user_id.clone();
         let config = config_clone.clone();
-        let chat_lines = chat_lines.clone();
         let debouncers = debouncers.clone();
         let session_ts = session_ts_msg.clone();
+        let host = host.clone();
         async move {
             let room_name = room.name().unwrap_or_else(|| room.room_id().to_string());
             let sender = event.sender.to_string();
@@ -413,8 +393,8 @@ pub async fn run(config: &Config, reset: bool) -> Result<()> {
                 let tx = map.entry(room_id.clone()).or_insert_with(|| {
                     let (tx, rx) = mpsc::unbounded_channel();
                     let config = config.clone();
-                    let chat_lines = chat_lines.clone();
-                    tokio::spawn(room_debounce_consumer(rx, config, chat_lines));
+                    let host = host.clone();
+                    tokio::spawn(room_debounce_consumer(rx, config, host));
                     tx
                 });
                 let _ = tx.send(msg);

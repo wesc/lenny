@@ -40,15 +40,12 @@ fn collect_files_recursive(dir: &Path, files: &mut Vec<std::path::PathBuf>) -> R
     Ok(())
 }
 
-/// Assemble context from system and dynamic directories.
-/// Returns a single string with section markers for each file.
-/// Order: system → dynamic, each sorted by relative path.
-/// Knowledge (facts + references) is accessed via RAG, not assembled here.
-pub fn assemble_context(system_dir: &Path, dynamic_dir: &Path) -> Result<String> {
+/// Assemble system prompt from system directory only.
+/// Returns a single string with section markers for each file, sorted by relative path.
+/// Dynamic files are now handled by the session module as chat history + documents.
+pub fn assemble_system_prompt(system_dir: &Path) -> Result<String> {
     let mut system_files = collect_files(system_dir)?;
-    let mut dynamic_files = collect_files(dynamic_dir)?;
     system_files.sort();
-    dynamic_files.sort();
 
     let mut context = String::new();
 
@@ -66,6 +63,29 @@ pub fn assemble_context(system_dir: &Path, dynamic_dir: &Path) -> Result<String>
         }
         context.push('\n');
     }
+
+    let token_count = count_tokens(&context);
+    if token_count > CONTEXT_TOKEN_WARN_THRESHOLD {
+        tracing::warn!(
+            tokens = token_count,
+            threshold = CONTEXT_TOKEN_WARN_THRESHOLD,
+            "assembled system prompt is large — may degrade tool-calling reliability"
+        );
+    } else {
+        tracing::info!(tokens = token_count, "assembled system prompt");
+    }
+
+    Ok(context)
+}
+
+/// Legacy wrapper: assemble context from system and dynamic directories.
+/// Used by code paths that haven't migrated to session-based context yet.
+#[allow(dead_code)]
+pub fn assemble_context(system_dir: &Path, dynamic_dir: &Path) -> Result<String> {
+    let mut context = assemble_system_prompt(system_dir)?;
+
+    let mut dynamic_files = collect_files(dynamic_dir)?;
+    dynamic_files.sort();
 
     if !dynamic_files.is_empty() {
         context.push_str(
@@ -87,17 +107,6 @@ pub fn assemble_context(system_dir: &Path, dynamic_dir: &Path) -> Result<String>
             }
             context.push('\n');
         }
-    }
-
-    let token_count = count_tokens(&context);
-    if token_count > CONTEXT_TOKEN_WARN_THRESHOLD {
-        tracing::warn!(
-            tokens = token_count,
-            threshold = CONTEXT_TOKEN_WARN_THRESHOLD,
-            "assembled context is large — may degrade tool-calling reliability"
-        );
-    } else {
-        tracing::info!(tokens = token_count, "assembled context");
     }
 
     Ok(context)
