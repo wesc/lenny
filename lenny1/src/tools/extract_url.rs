@@ -47,7 +47,10 @@ impl ToolHandler for ExtractUrlTool {
                         .ok_or_else(|| anyhow::anyhow!("extract completed but no data"))?;
                     let text = serde_json::to_string_pretty(&data)?;
                     tracing::debug!(url, len = text.len(), "extract_url: done");
-                    return Ok(text);
+                    return Ok(format!(
+                        "{text}\n\n(Partial extraction from {}. The source page may contain additional information not covered by this query. Use extract_url again with a different prompt to retrieve more.)",
+                        args.url
+                    ));
                 }
                 "failed" => {
                     let msg = status.error.unwrap_or_else(|| "unknown error".to_string());
@@ -63,8 +66,9 @@ pub fn tool_definition() -> ToolDefinition {
     ToolDefinition {
         name: "extract_url".to_string(),
         description: "Extract information from a URL by asking a question about its content. \
-            Uses Firecrawl's extract API to intelligently answer the prompt based on the page. \
-            Use this whenever you need to read, summarize, or query a web page."
+            Each call returns only information relevant to your specific prompt — the source page \
+            likely contains more. Query the same URL again with a different prompt to retrieve \
+            different details. Use this whenever you need to read, summarize, or query a web page."
             .to_string(),
         parameters: json!({
             "type": "object",

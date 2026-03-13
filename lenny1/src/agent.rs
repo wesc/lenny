@@ -194,6 +194,7 @@ impl std::fmt::Display for Effort {
 pub trait AgentHook: Send {
     fn on_request(&mut self, iteration: usize, request: &CompletionRequest) {}
     fn on_response(&mut self, iteration: usize, content: Option<&str>, tool_calls: usize) {}
+    fn on_tool_start(&mut self, iteration: usize, name: &str, args: &str) {}
     fn on_tool_call(&mut self, iteration: usize, name: &str, args: &str, result: &str) {}
     fn on_reasoning_done(&mut self, state: &AgentState, outcome: &IterationOutcome) {}
 }
@@ -360,6 +361,7 @@ impl<'a> Agent<'a> {
 
             for tc in &tool_calls {
                 let args_str = serde_json::to_string(&tc.function.arguments).unwrap_or_default();
+                hook.on_tool_start(state.iterations, &tc.function.name, &args_str);
                 let result = dispatch(self.tool_defs, tc).await?;
                 hook.on_tool_call(state.iterations, &tc.function.name, &args_str, &result);
                 state.tool_events.push(ToolEvent {

@@ -161,7 +161,7 @@ async fn room_debounce_consumer(
 
         // Session ID per room: matrix/{host}/{room_slug}
         let session_id = SessionId::new(&format!("matrix/{host}"), &sanitized_id);
-        match once::run_prompt(&config, "matrix", &session_id, &prompt).await {
+        match once::run_prompt(&config, "matrix", &session_id, &prompt, None).await {
             Ok(result) if !result.skipped => {
                 let html = markdown_to_html(&result.answer);
                 let mut content = RoomMessageEventContent::text_html(&result.answer, &html);

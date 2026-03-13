@@ -202,7 +202,7 @@ pub async fn run(base_config: &Config) -> Result<()> {
 
         // no_response eval doesn't need mock tools (it tests response behavior)
         let outcome = if eval.channel == "matrix" {
-            once::run_prompt(&config, eval.channel, &eval_session, eval.prompt).await
+            once::run_prompt(&config, eval.channel, &eval_session, eval.prompt, None).await
         } else {
             once::run_prompt_with_tools(
                 &config,

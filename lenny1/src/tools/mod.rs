@@ -80,14 +80,18 @@ fn now() -> String {
 
 // ---- LennyHook: captures tool events + prompt logging ----
 
-pub struct LennyHook {
+pub struct LennyHook<'a> {
     pub state: Arc<Mutex<AgentState>>,
     pub prompt_log_path: Option<PathBuf>,
     pub preamble: Option<String>,
+    pub prompt_hook: Option<&'a mut dyn crate::once::PromptHooks>,
 }
 
-impl agent::AgentHook for LennyHook {
+impl agent::AgentHook for LennyHook<'_> {
     fn on_request(&mut self, _iteration: usize, request: &rig::completion::CompletionRequest) {
+        if let Some(ref mut hook) = self.prompt_hook {
+            hook.on_request();
+        }
         if let Some(path) = &self.prompt_log_path {
             let mut out = String::new();
             if let Some(preamble) = &self.preamble {
@@ -106,18 +110,29 @@ impl agent::AgentHook for LennyHook {
         }
     }
 
-    fn on_tool_call(&mut self, _iteration: usize, name: &str, args: &str, result: &str) {
+    fn on_tool_start(&mut self, _iteration: usize, name: &str, args: &str) {
         let args_value =
             serde_json::from_str(args).unwrap_or(serde_json::Value::String(args.to_string()));
         tracing::debug!(tool = name, args, "tool call");
+        if let Some(ref mut hook) = self.prompt_hook {
+            hook.on_tool_start(name, args);
+        }
         if let Ok(mut state) = self.state.lock() {
             state.events.push(AgentEvent::ToolCall {
                 tool: name.to_string(),
                 args: args_value,
                 timestamp: now(),
             });
-            let truncated = &result[..result.len().min(200)];
-            tracing::debug!(tool = name, result = truncated, "tool result");
+        }
+    }
+
+    fn on_tool_call(&mut self, _iteration: usize, name: &str, _args: &str, result: &str) {
+        let truncated = &result[..result.len().min(200)];
+        tracing::debug!(tool = name, result = truncated, "tool result");
+        if let Some(ref mut hook) = self.prompt_hook {
+            hook.on_tool_result(name, result);
+        }
+        if let Ok(mut state) = self.state.lock() {
             state.events.push(AgentEvent::ToolResult {
                 tool: name.to_string(),
                 result: result.to_string(),

@@ -2,8 +2,16 @@ use anyhow::Result;
 use std::io::{BufRead, Write};
 
 use crate::config::Config;
-use crate::once;
+use crate::once::{self, PromptHooks};
 use crate::session::SessionId;
+
+struct CliHook;
+
+impl PromptHooks for CliHook {
+    fn on_tool_start(&mut self, name: &str, args: &str) {
+        eprintln!("\x1b[38;5;245m  → {name}({args})\x1b[0m");
+    }
+}
 
 /// Run an interactive chat loop, reading from `input` and writing to `output`.
 ///
@@ -34,7 +42,9 @@ pub async fn chat_loop<R: BufRead, W: Write>(
             break;
         }
 
-        let result = match once::run_prompt(config, "cli", &session_id, line).await {
+        let mut hook = CliHook;
+        let result = match once::run_prompt(config, "cli", &session_id, line, Some(&mut hook)).await
+        {
             Ok(r) => r,
             Err(e) => {
                 writeln!(output, "\n\x1b[38;5;245m[no response: {e}]\x1b[0m\n")?;

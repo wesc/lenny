@@ -19,6 +19,18 @@ use crate::tools::{
     WebSearchTool, WriteNoteTool,
 };
 
+/// Caller-provided hooks for prompt execution events.
+/// All methods default to no-ops.
+#[allow(unused_variables)]
+pub trait PromptHooks: Send {
+    /// Called before each LLM request is sent.
+    fn on_request(&mut self) {}
+    /// Called before a tool is executed.
+    fn on_tool_start(&mut self, name: &str, args: &str) {}
+    /// Called after a tool returns a result.
+    fn on_tool_result(&mut self, name: &str, result: &str) {}
+}
+
 /// Result of running a single prompt through the agent.
 pub struct PromptResult {
     pub answer: String,
@@ -141,8 +153,9 @@ pub async fn run_prompt(
     channel: &str,
     session_id: &SessionId,
     user_prompt: &str,
+    hook: Option<&mut dyn PromptHooks>,
 ) -> Result<PromptResult> {
-    run_prompt_inner(config, channel, session_id, user_prompt, None).await
+    run_prompt_inner(config, channel, session_id, user_prompt, None, hook).await
 }
 
 /// Run a prompt with custom tools (for evals with mock tool handlers).
@@ -153,7 +166,7 @@ pub async fn run_prompt_with_tools(
     user_prompt: &str,
     tools: Vec<ToolDef>,
 ) -> Result<PromptResult> {
-    run_prompt_inner(config, channel, session_id, user_prompt, Some(tools)).await
+    run_prompt_inner(config, channel, session_id, user_prompt, Some(tools), None).await
 }
 
 async fn run_prompt_inner(
@@ -162,6 +175,7 @@ async fn run_prompt_inner(
     session_id: &SessionId,
     user_prompt: &str,
     custom_tools: Option<Vec<ToolDef>>,
+    prompt_hook: Option<&mut dyn PromptHooks>,
 ) -> Result<PromptResult> {
     // Step 1: Assemble system prompt from channel directory
     let system_dir = config.system_dir.join(channel);
@@ -187,6 +201,7 @@ async fn run_prompt_inner(
         state: hook_state.clone(),
         prompt_log_path,
         preamble: Some(preamble.clone()),
+        prompt_hook,
     };
 
     // Step 3: Run agent with history from disk
@@ -306,7 +321,7 @@ pub async fn run_completion_typed_with_model<T: DeserializeOwned + Send>(
 /// The `once` CLI command: run prompt, print output, save turn.
 pub async fn run(config: &Config, user_prompt: &str) -> Result<()> {
     let session_id = SessionId::new("once", "default");
-    let result = run_prompt(config, "cli", &session_id, user_prompt).await?;
+    let result = run_prompt(config, "cli", &session_id, user_prompt, None).await?;
 
     let tool_calls: Vec<&AgentEvent> = result
         .events
