@@ -17,17 +17,27 @@ impl ToolHandler for RandomLetterTool {
     }
 }
 
+pub fn tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "random_letter".to_string(),
+        description: "Generate a random lowercase letter (a-z). Takes no arguments.".to_string(),
+        parameters: json!({"type": "object", "properties": {}}),
+    }
+}
+
+pub fn mock_tool_def() -> ToolDef {
+    ToolDef {
+        tool: tool_definition(),
+        handler: Box::new(crate::agent::MockHandler {
+            response: "q".to_string(),
+        }),
+    }
+}
+
 impl RandomLetterTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: ToolDefinition {
-                name: "random_letter".to_string(),
-                description: "Generate a random lowercase letter (a-z).".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {}
-                }),
-            },
+            tool: tool_definition(),
             handler: Box::new(self),
         }
     }

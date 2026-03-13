@@ -37,27 +37,40 @@ impl ToolHandler for WriteNoteTool {
     }
 }
 
+pub fn tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "write_note".to_string(),
+        description: "Write a note or report to a file in the notes directory (overwrites if exists). Use this to save final reports or any information worth remembering long-term. The file will be automatically incorporated into the knowledge base over time.".to_string(),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type": "string",
+                    "description": "Filename for the note (e.g. 'bluesky-research-2026-03-10.md'). No path separators."
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The full content to write to the file."
+                }
+            },
+            "required": ["filename", "content"]
+        }),
+    }
+}
+
+pub fn mock_tool_def() -> ToolDef {
+    ToolDef {
+        tool: tool_definition(),
+        handler: Box::new(crate::agent::MockHandler {
+            response: "Note saved.".to_string(),
+        }),
+    }
+}
+
 impl WriteNoteTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: ToolDefinition {
-                name: "write_note".to_string(),
-                description: "Write a note or report to a file in the notes directory (overwrites if exists). Use this to save final reports or any information worth remembering long-term. The file will be automatically incorporated into the knowledge base over time.".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "filename": {
-                            "type": "string",
-                            "description": "Filename for the note (e.g. 'bluesky-research-2026-03-10.md'). No path separators."
-                        },
-                        "content": {
-                            "type": "string",
-                            "description": "The full content to write to the file."
-                        }
-                    },
-                    "required": ["filename", "content"]
-                }),
-            },
+            tool: tool_definition(),
             handler: Box::new(self),
         }
     }

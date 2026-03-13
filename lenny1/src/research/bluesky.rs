@@ -1,23 +1,17 @@
 use anyhow::Result;
 use firecrawl::FirecrawlApp;
-use serde::Deserialize;
 use std::fs;
 
 use crate::agent::{self, Agent, ToolDef};
 use crate::config::Config;
-use crate::tools::{BlueskyTrendingTool, ScrapeUrlTool};
-
-#[derive(Debug, Deserialize)]
-struct ResearchOutput {
-    summary: String,
-}
+use crate::tools::{BlueskyTrendingTool, ExtractUrlTool};
 
 const RESEARCH_SYSTEM: &str = "\
 You are a deep research agent that analyzes trending AI/ML content from Bluesky.
 
 Your task:
 1. Call bluesky_trending to get the latest trending AI/ML links.
-2. For each of the top links (up to 10), call scrape_url to fetch the full content.
+2. For each of the top links (up to 10), call extract_url to extract the key content.
 3. After gathering all content, produce a comprehensive research summary.
 
 When you are done gathering data, respond with your final analysis as plain text. \
@@ -28,22 +22,6 @@ takeaways from the trending content. Group related items into themes. \
 Highlight particularly significant developments. \
 Include links as inline citations for every claim or development you mention — \
 use the original URLs from the trending data and scraped pages.";
-
-const RESPONSE_SYSTEM: &str = "\
-You are a research analyst. You have been given tool results from a deep research session \
-analyzing trending AI/ML content from Bluesky.
-
-Respond with a JSON object:
-{\"summary\": \"<your comprehensive research summary>\"}
-
-The summary should be a detailed markdown document that:
-- Identifies the top themes and trends
-- Highlights the most significant developments
-- Groups related items together
-- Includes links as inline citations (e.g. [title](url)) for every claim or development mentioned
-- Provides context and analysis, not just a list of links
-
-Your ENTIRE response must be valid JSON. No text before or after the JSON object.";
 
 pub async fn run(config: &Config, since: &str, until: &str) -> Result<()> {
     eprintln!("  Deep research: {since} -> {until}");
@@ -72,10 +50,10 @@ pub async fn run(config: &Config, since: &str, until: &str) -> Result<()> {
     let link_count = trending["link_count"].as_u64().unwrap_or(0);
     eprintln!("  Found {link_count} trending links");
 
-    // Step 2: Build agent with scrape_url tool + bluesky_trending for the research loop
+    // Step 2: Build agent with extract_url tool + bluesky_trending for the research loop
     let tools: Vec<ToolDef> = vec![
         BlueskyTrendingTool.tool_def(),
-        ScrapeUrlTool {
+        ExtractUrlTool {
             firecrawl: firecrawl.clone(),
         }
         .tool_def(),
@@ -86,13 +64,12 @@ pub async fn run(config: &Config, since: &str, until: &str) -> Result<()> {
     let prompt = format!(
         "Here are the trending AI/ML links from Bluesky ({since} to {until}):\n\n\
          {trending_json}\n\n\
-         Now scrape the top links (up to 10) using scrape_url to get their full content, \
+         Now extract the key content from the top links (up to 10) using extract_url, \
          then provide a comprehensive research summary of all the trends and developments."
     );
 
     let agent = Agent::builder(&client, config)
         .system(RESEARCH_SYSTEM)
-        .response_system(RESPONSE_SYSTEM)
         .tools(&tools)
         .max_iterations(15)
         .build();
@@ -101,25 +78,7 @@ pub async fn run(config: &Config, since: &str, until: &str) -> Result<()> {
     let mut hook = ResearchHook;
     let result = agent.run(&prompt, vec![], &mut hook).await?;
 
-    // Parse the summary from agent response
-    let output: ResearchOutput = serde_json::from_str(result.answer.trim())
-        .or_else(|_| {
-            // Fallback: strip markdown fences
-            let trimmed = result.answer.trim();
-            let json_str = if trimmed.starts_with("```") {
-                let after = trimmed
-                    .strip_prefix("```json")
-                    .or_else(|| trimmed.strip_prefix("```"))
-                    .unwrap_or(trimmed);
-                after.strip_suffix("```").unwrap_or(after).trim()
-            } else {
-                trimmed
-            };
-            serde_json::from_str(json_str)
-        })
-        .unwrap_or(ResearchOutput {
-            summary: result.answer.clone(),
-        });
+    let summary = result.answer.clone();
 
     // Write output: two JSON lines (trending + summary)
     let out_dir = config.dynamic_dir.join("research").join("bluesky");
@@ -139,7 +98,7 @@ pub async fn run(config: &Config, since: &str, until: &str) -> Result<()> {
         "generated_at": chrono::Utc::now().to_rfc3339(),
         "reasoning_turns": result.reasoning_turns,
         "tool_events": result.tool_events.len(),
-        "summary": output.summary,
+        "summary": summary,
     });
     let line2 = serde_json::to_string(&summary_json)?;
 
@@ -158,7 +117,7 @@ pub async fn run(config: &Config, since: &str, until: &str) -> Result<()> {
     );
 
     // Also print the summary to stdout
-    println!("{}", output.summary);
+    println!("{summary}");
 
     Ok(())
 }

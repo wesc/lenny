@@ -9,12 +9,12 @@ pub enum ProviderConfig {
     #[serde(rename = "openrouter")]
     OpenRouter {
         api_key: String,
+        /// Fallback model name (lowest priority).
         #[serde(default)]
         model: Option<String>,
+        /// Primary model for tool-calling and response generation.
         #[serde(default)]
-        reasoning_model: Option<String>,
-        #[serde(default)]
-        response_model: Option<String>,
+        agent_model: Option<String>,
         #[serde(default)]
         comprehension_model: Option<String>,
     },
@@ -27,23 +27,24 @@ impl ProviderConfig {
         ProviderConfig::OpenRouter {
             api_key: "test-key".to_string(),
             model: Some("test-model".to_string()),
-            reasoning_model: None,
-            response_model: None,
+            agent_model: None,
             comprehension_model: None,
         }
     }
 
-    fn model_fields(&self) -> (&Option<String>, &Option<String>, &Option<String>) {
+    /// Primary model for tool-calling and response generation.
+    /// Falls back to `model` if `agent_model` is not set.
+    pub fn agent_model(&self) -> &str {
         let ProviderConfig::OpenRouter {
-            model,
-            reasoning_model,
-            response_model,
-            ..
+            model, agent_model, ..
         } = self;
-        (model, reasoning_model, response_model)
+        agent_model
+            .as_deref()
+            .or(model.as_deref())
+            .expect("no agent_model or model configured")
     }
 
-    /// Model for fact extraction / comprehension. Falls back to `response_model()`.
+    /// Model for fact extraction / comprehension. Falls back to `agent_model()`.
     pub fn comprehension_model(&self) -> &str {
         let ProviderConfig::OpenRouter {
             comprehension_model,
@@ -51,56 +52,12 @@ impl ProviderConfig {
         } = self;
         comprehension_model
             .as_deref()
-            .unwrap_or_else(|| self.response_model())
+            .unwrap_or_else(|| self.agent_model())
     }
 
-    #[allow(dead_code)]
-    pub fn model(&self) -> &str {
-        let (model, _, _) = self.model_fields();
-        model.as_deref().unwrap_or_else(|| {
-            let (_, r, resp) = self.model_fields();
-            r.as_deref()
-                .or(resp.as_deref())
-                .expect("no model configured")
-        })
-    }
-
-    /// Model for tool-calling / reasoning phase. Falls back to `model`.
-    pub fn reasoning_model(&self) -> &str {
-        let (model, reasoning, _) = self.model_fields();
-        reasoning
-            .as_deref()
-            .or(model.as_deref())
-            .expect("no reasoning_model or model configured")
-    }
-
-    /// Model for final response phase. Falls back to `model`.
-    pub fn response_model(&self) -> &str {
-        let (model, _, response) = self.model_fields();
-        response
-            .as_deref()
-            .or(model.as_deref())
-            .expect("no response_model or model configured")
-    }
-
-    /// True when separate reasoning + response models are configured.
-    pub fn is_dual_model(&self) -> bool {
-        let (_, reasoning, response) = self.model_fields();
-        reasoning.is_some() && response.is_some()
-    }
-
-    /// Short display string like "openrouter/gpt-oss-120b:nitro" or
-    /// "openrouter/gpt-oss-120b:nitro + gemini-2.5-flash-lite" for dual model.
+    /// Short display string like "openrouter/model-name".
     pub fn display_short(&self) -> String {
-        if self.is_dual_model() {
-            format!(
-                "openrouter/{} + {}",
-                self.reasoning_model(),
-                self.response_model()
-            )
-        } else {
-            format!("openrouter/{}", self.reasoning_model())
-        }
+        format!("openrouter/{}", self.agent_model())
     }
 }
 

@@ -28,3 +28,4 @@ data.bak/
 
 config.prod.yaml
 data.prod/
+tests/fixtures/basic-evals/dynamic/

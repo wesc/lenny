@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use rig::OneOrMany;
 use rig::completion::{
     CompletionModel as CompletionModelTrait, CompletionRequest, ToolDefinition,
-    message::{AssistantContent, Text},
+    message::AssistantContent,
 };
 use rig::message::ToolChoice;
 use rig::providers::openrouter;
@@ -70,6 +70,18 @@ pub struct ToolDef {
     pub handler: Box<dyn ToolHandler>,
 }
 
+/// Mock tool handler that returns a fixed string. Used by evals.
+pub struct MockHandler {
+    pub response: String,
+}
+
+#[async_trait]
+impl ToolHandler for MockHandler {
+    async fn call(&self, _args: &serde_json::Value) -> Result<String> {
+        Ok(self.response.clone())
+    }
+}
+
 /// Look up a tool's handler by name and execute it.
 pub async fn dispatch(tool_defs: &[ToolDef], call: &ToolCall) -> Result<String> {
     // rig-core provides arguments as serde_json::Value directly
@@ -89,22 +101,21 @@ pub async fn dispatch(tool_defs: &[ToolDef], call: &ToolCall) -> Result<String> 
 
 /// A single tool call event recorded during the reasoning loop.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ToolEvent {
     pub tool: String,
     pub args: String,
     pub result: String,
 }
 
-/// Result of running a single eval through reasoning + response.
+/// Result of running the agent loop.
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct RunResult {
-    /// Final answer from the response model.
+    /// Final answer text from the model.
     pub answer: String,
     /// Tool calls and their results from the reasoning loop.
     pub tool_events: Vec<ToolEvent>,
-    /// The formatted tool context that was passed to the response model.
-    pub tool_context: String,
     /// Number of assistant turns in the reasoning loop.
     pub reasoning_turns: usize,
     /// All messages produced during this run (user input + assistant + tool results).
@@ -185,8 +196,6 @@ pub trait AgentHook: Send {
     fn on_response(&mut self, iteration: usize, content: Option<&str>, tool_calls: usize) {}
     fn on_tool_call(&mut self, iteration: usize, name: &str, args: &str, result: &str) {}
     fn on_reasoning_done(&mut self, state: &AgentState, outcome: &IterationOutcome) {}
-    fn on_response_phase_request(&mut self, request: &CompletionRequest) {}
-    fn on_response_phase_done(&mut self, answer: &str) {}
 }
 
 /// No-op hook implementation.
@@ -200,45 +209,30 @@ impl AgentHook for NoopHook {}
 /// Immutable agent config. Short-lived, one per prompt.
 pub struct Agent<'a> {
     client: openrouter::Client,
-    reasoning_model: &'a str,
-    response_model: &'a str,
-    /// System prompt for the reasoning phase (includes tool-calling instructions).
+    model: &'a str,
+    /// System prompt (includes tool-calling instructions and response format).
     system: &'a str,
-    /// System prompt for the response phase (no tool instructions). Falls back to `system`.
-    response_system: Option<&'a str>,
     tool_defs: &'a [ToolDef],
     /// Documents to include in completion requests (general knowledge from dynamic/).
     documents: Vec<Document>,
     max_iterations: usize,
-    reasoning_max_tokens: u64,
-    response_max_tokens: u64,
-    response_effort: Effort,
+    max_tokens: u64,
 }
 
 /// Builder for Agent.
 pub struct AgentBuilder<'a> {
     client: openrouter::Client,
-    reasoning_model: &'a str,
-    response_model: &'a str,
+    model: &'a str,
     system: &'a str,
-    response_system: Option<&'a str>,
     tool_defs: &'a [ToolDef],
     documents: Vec<Document>,
     max_iterations: usize,
-    reasoning_max_tokens: u64,
-    response_max_tokens: u64,
-    response_effort: Effort,
+    max_tokens: u64,
 }
 
 impl<'a> AgentBuilder<'a> {
     pub fn system(mut self, system: &'a str) -> Self {
         self.system = system;
-        self
-    }
-
-    /// Set a separate system prompt for the response phase (without tool instructions).
-    pub fn response_system(mut self, system: &'a str) -> Self {
-        self.response_system = Some(system);
         self
     }
 
@@ -253,12 +247,6 @@ impl<'a> AgentBuilder<'a> {
         self
     }
 
-    #[allow(dead_code)]
-    pub fn response_effort(mut self, effort: Effort) -> Self {
-        self.response_effort = effort;
-        self
-    }
-
     pub fn documents(mut self, documents: Vec<Document>) -> Self {
         self.documents = documents;
         self
@@ -267,16 +255,12 @@ impl<'a> AgentBuilder<'a> {
     pub fn build(self) -> Agent<'a> {
         Agent {
             client: self.client,
-            reasoning_model: self.reasoning_model,
-            response_model: self.response_model,
+            model: self.model,
             system: self.system,
-            response_system: self.response_system,
             tool_defs: self.tool_defs,
             documents: self.documents,
             max_iterations: self.max_iterations,
-            reasoning_max_tokens: self.reasoning_max_tokens,
-            response_max_tokens: self.response_max_tokens,
-            response_effort: self.response_effort,
+            max_tokens: self.max_tokens,
         }
     }
 }
@@ -285,16 +269,12 @@ impl<'a> Agent<'a> {
     pub fn builder(client: &openrouter::Client, config: &'a Config) -> AgentBuilder<'a> {
         AgentBuilder {
             client: client.clone(),
-            reasoning_model: config.provider.reasoning_model(),
-            response_model: config.provider.response_model(),
+            model: config.provider.agent_model(),
             system: "",
-            response_system: None,
             tool_defs: &[],
             documents: vec![],
             max_iterations: config.max_iterations,
-            reasoning_max_tokens: 2048,
-            response_max_tokens: 1024,
-            response_effort: Effort::Medium,
+            max_tokens: 2048,
         }
     }
 
@@ -318,7 +298,7 @@ impl<'a> Agent<'a> {
             .unwrap_or_else(|_| OneOrMany::one(Message::user("")));
 
         let request = CompletionRequest {
-            model: Some(self.reasoning_model.to_string()),
+            model: Some(self.model.to_string()),
             preamble: Some(state.preamble.clone()),
             chat_history,
             documents: self.documents.clone(),
@@ -327,14 +307,14 @@ impl<'a> Agent<'a> {
             max_tokens: None,
             tool_choice: Some(ToolChoice::Auto),
             additional_params: Some(serde_json::json!({
-                "max_tokens": self.reasoning_max_tokens,
+                "max_tokens": self.max_tokens,
             })),
             output_schema: None,
         };
 
         hook.on_request(state.iterations, &request);
 
-        let model = openrouter::CompletionModel::new(self.client.clone(), self.reasoning_model);
+        let model = openrouter::CompletionModel::new(self.client.clone(), self.model);
         let response = send_with_retry!(model, request)?;
 
         // Extract tool calls and text from response
@@ -401,7 +381,7 @@ impl<'a> Agent<'a> {
         Ok(outcome)
     }
 
-    /// Run full reasoning loop + response phase.
+    /// Run full tool-calling loop until the model emits text with no tool calls.
     ///
     /// `history` is prepended to messages (previous turns from disk).
     /// The user prompt is appended after history.
@@ -426,112 +406,27 @@ impl<'a> Agent<'a> {
             let outcome = self.once(&mut state, hook).await?;
             match outcome {
                 IterationOutcome::ToolCalls { .. } => continue,
-                IterationOutcome::Done { .. } => break,
+                IterationOutcome::Done { ref text } => {
+                    let answer = text.clone().unwrap_or_default();
+                    let reasoning_turns = state
+                        .messages
+                        .iter()
+                        .filter(|m| matches!(m, Message::Assistant { .. }))
+                        .count();
+
+                    return Ok(RunResult {
+                        answer,
+                        tool_events: state.tool_events,
+                        reasoning_turns,
+                        messages: state.messages,
+                    });
+                }
                 IterationOutcome::MaxIterations => {
                     bail!("reasoning loop exceeded {} turns", self.max_iterations);
                 }
             }
         }
-
-        let reasoning_turns = state
-            .messages
-            .iter()
-            .filter(|m| matches!(m, Message::Assistant { .. }))
-            .count();
-
-        let tool_context = format_tool_context(&state.tool_events);
-        let answer = self.response_phase(prompt, &tool_context, hook).await?;
-
-        Ok(RunResult {
-            answer,
-            tool_events: state.tool_events,
-            tool_context,
-            reasoning_turns,
-            messages: state.messages,
-        })
     }
-
-    /// Response phase only (for hallucination evals).
-    #[allow(dead_code)]
-    pub async fn run_response_only(
-        &self,
-        prompt: &str,
-        tool_context: &str,
-        hook: &mut dyn AgentHook,
-    ) -> Result<String> {
-        self.response_phase(prompt, tool_context, hook).await
-    }
-
-    /// Internal: call the response model with accumulated tool context.
-    async fn response_phase(
-        &self,
-        user_prompt: &str,
-        tool_context: &str,
-        hook: &mut dyn AgentHook,
-    ) -> Result<String> {
-        let prompt = if tool_context.is_empty() {
-            user_prompt.to_string()
-        } else {
-            format!(
-                "{user_prompt}\n\n---\n\
-                 The following information was gathered from tools:\n\n\
-                 {tool_context}"
-            )
-        };
-
-        let system = self.response_system.unwrap_or(self.system);
-
-        let mut additional = serde_json::json!({
-            "max_tokens": self.response_max_tokens,
-            "response_format": {"type": "json_object"},
-            "plugins": [{"id": "response-healing"}],
-        });
-
-        // Add reasoning config
-        if self.response_effort == Effort::None {
-            additional["reasoning"] = serde_json::json!({
-                "effort": "none",
-                "max_tokens": 0,
-            });
-        } else {
-            additional["reasoning"] = serde_json::json!({
-                "effort": self.response_effort.as_str(),
-            });
-        }
-
-        let request = CompletionRequest {
-            model: Some(self.response_model.to_string()),
-            preamble: Some(system.to_string()),
-            chat_history: OneOrMany::one(Message::user(prompt.as_str())),
-            documents: vec![],
-            tools: vec![],
-            temperature: None,
-            max_tokens: None,
-            tool_choice: None,
-            additional_params: Some(additional),
-            output_schema: None,
-        };
-
-        hook.on_response_phase_request(&request);
-
-        let model = openrouter::CompletionModel::new(self.client.clone(), self.response_model);
-        let response = send_with_retry!(model, request)?;
-
-        let answer = extract_text(&response.choice);
-        hook.on_response_phase_done(&answer);
-        Ok(answer)
-    }
-}
-
-/// Extract text content from a completion response choice.
-fn extract_text(choice: &OneOrMany<AssistantContent>) -> String {
-    let mut parts = Vec::new();
-    for content in choice.iter() {
-        if let AssistantContent::Text(Text { text }) = content {
-            parts.push(text.as_str());
-        }
-    }
-    parts.join("")
 }
 
 /// Effort levels ordered from lowest to highest.
@@ -595,15 +490,6 @@ pub async fn probe_effort_range(client: &openrouter::Client, model: &str) -> Res
         max,
         supported,
     })
-}
-
-/// Format tool events into a human-readable context block.
-pub fn format_tool_context(events: &[ToolEvent]) -> String {
-    events
-        .iter()
-        .map(|e| format!("[{}] {}\n-> {}", e.tool, e.args, e.result))
-        .collect::<Vec<_>>()
-        .join("\n\n")
 }
 
 // ---------------------------------------------------------------------------

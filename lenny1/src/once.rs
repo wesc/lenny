@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use regex::Regex;
 use rig::OneOrMany;
 use rig::completion::{
     CompletionModel as CompletionModelTrait, CompletionRequest, message::AssistantContent,
@@ -6,16 +7,16 @@ use rig::completion::{
 use rig::providers::openrouter;
 use serde::de::DeserializeOwned;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::agent::{self, Agent, Message, ToolDef};
 use crate::config::Config;
-use crate::context;
+use crate::context::{self, TemplateContext};
 use crate::session::{self, SessionId};
 use crate::tools::{
-    AgentEvent, AgentOutput, BlueskyTrendingTool, ContextSearchTool, ExtractToNoteTool, LennyHook,
-    LookupReferenceTool, RandomLetterTool, RandomNumberTool, ReadNoteTool, ScrapeUrlTool,
-    SummarizeUrlTool, WebScrapeTool, WriteNoteTool,
+    AgentEvent, BlueskyTrendingTool, ContextSearchTool, ExtractUrlToNoteTool, ExtractUrlTool,
+    LennyHook, LookupReferenceTool, RandomLetterTool, RandomNumberTool, ReadNoteTool,
+    WebSearchTool, WriteNoteTool,
 };
 
 /// Result of running a single prompt through the agent.
@@ -25,31 +26,6 @@ pub struct PromptResult {
     pub skipped: bool,
     pub events: Vec<AgentEvent>,
 }
-
-/// Instructions for the reasoning phase: tells the model to use tools.
-const TOOL_INSTRUCTIONS: &str = "\
-IMPORTANT — Knowledge base procedure:
-BEFORE answering, you MUST call context_search with a query derived from the user's message. \
-This applies to virtually every question — about yourself, your preferences, past events, facts, \
-people, decisions, or anything that might have been discussed before. \
-The only exceptions are purely procedural messages (e.g. \"hello\", \"thanks\") that clearly \
-need no factual lookup. When in doubt, search. You may call context_search multiple times \
-with different queries if the topic is broad.";
-
-/// Instructions for the response phase: JSON format + anti-hallucination guardrail.
-/// No mention of tools — the response model doesn't have any.
-const RESPONSE_INSTRUCTIONS: &str = "\
-Respond with a JSON object:
-{\"no_response\": bool, \"answer\": string, \"slug\": string}
-
-- Ensure that all the fields in the response JSON are the correct type.
-- If the message is not directed at you or needs no reply, you MUST respond: {\"no_response\": true, \"answer\": \"\", \"slug\": \"\"}
-- Otherwise: set no_response to false, answer the question, \
-and set slug to a short 2-4 word lowercase hyphenated topic summary.
-- For questions about personal details, preferences, history, or specific facts about people and projects: \
-only use what is in your provided context or tool results. If that information was not found, \
-say you don't have it in your knowledge base rather than guessing.
-- Your ENTIRE response must be valid JSON. No text before or after the JSON object.";
 
 /// Returns the prompt log path if logging is enabled, `None` otherwise.
 fn prompt_log_path_for(config: &Config) -> Option<PathBuf> {
@@ -83,7 +59,6 @@ fn build_tools(config: &Config) -> Vec<ToolDef> {
         context_search.tool_def(),
         RandomNumberTool.tool_def(),
         RandomLetterTool.tool_def(),
-        WebScrapeTool.tool_def(),
         BlueskyTrendingTool.tool_def(),
         write_note.tool_def(),
         read_note.tool_def(),
@@ -91,19 +66,19 @@ fn build_tools(config: &Config) -> Vec<ToolDef> {
     if let Some(ref api_key) = config.firecrawl_api_key {
         if let Ok(firecrawl) = firecrawl::FirecrawlApp::new(api_key) {
             tools.push(
-                SummarizeUrlTool {
+                WebSearchTool {
                     firecrawl: firecrawl.clone(),
                 }
                 .tool_def(),
             );
             tools.push(
-                ScrapeUrlTool {
+                ExtractUrlTool {
                     firecrawl: firecrawl.clone(),
                 }
                 .tool_def(),
             );
             tools.push(
-                ExtractToNoteTool {
+                ExtractUrlToNoteTool {
                     firecrawl,
                     dynamic_dir: config.dynamic_dir.clone(),
                 }
@@ -114,45 +89,96 @@ fn build_tools(config: &Config) -> Vec<ToolDef> {
     tools
 }
 
-/// Run a prompt through the agent and return structured result (no printing).
-/// Uses the base `config.system_dir`. For channel-specific system prompts,
-/// use `run_prompt_with_system_dir`.
-pub async fn run_prompt(
-    config: &Config,
-    session_id: &SessionId,
-    user_prompt: &str,
-) -> Result<PromptResult> {
-    run_prompt_with_system_dir(config, &config.system_dir, session_id, user_prompt).await
+/// Build a TemplateContext with the current date/time in Eastern timezone.
+fn build_template_context(channel: &str) -> TemplateContext {
+    let eastern = chrono::Utc::now().with_timezone(&chrono_tz::US::Eastern);
+    let now_str = eastern.format("%A, %B %-d, %Y %-I:%M %p %Z").to_string();
+    TemplateContext {
+        channel_name: channel.to_string(),
+        current_datetime: now_str,
+    }
 }
 
-/// Run a prompt with a custom system directory for context assembly.
+/// Extract slug from answer text. Looks for `[slug: topic-name]` at end.
+/// Falls back to deriving slug from first few words.
+fn extract_slug(answer: &str) -> String {
+    let re = Regex::new(r"\[slug:\s*([a-z0-9-]+)\]\s*$").unwrap();
+    if let Some(caps) = re.captures(answer) {
+        return caps[1].to_string();
+    }
+    // Fallback: first 4 words, lowercased, hyphenated
+    let slug: String = answer
+        .split_whitespace()
+        .take(4)
+        .collect::<Vec<_>>()
+        .join("-")
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .collect();
+    if slug.is_empty() {
+        "unknown".to_string()
+    } else {
+        slug
+    }
+}
+
+/// Strip the slug tag from the answer text if present.
+fn strip_slug_tag(answer: &str) -> String {
+    let re = Regex::new(r"\s*\[slug:\s*[a-z0-9-]+\]\s*$").unwrap();
+    re.replace(answer, "").to_string()
+}
+
+/// Detect no-response convention.
+fn is_no_response(answer: &str) -> bool {
+    answer.contains("[no-response]")
+}
+
+/// Run a prompt through the agent with a channel name for system prompt selection.
 /// Loads session history + documents from disk, runs agent, persists the turn.
-pub async fn run_prompt_with_system_dir(
+pub async fn run_prompt(
     config: &Config,
-    system_dir: &Path,
+    channel: &str,
     session_id: &SessionId,
     user_prompt: &str,
 ) -> Result<PromptResult> {
-    // Step 1: Assemble system prompt (no dynamic files — those are now documents)
-    let preamble = context::assemble_system_prompt(system_dir)?;
-    let eastern = chrono::Utc::now().with_timezone(&chrono_tz::US::Eastern);
-    let now_str = eastern.format("%A, %B %-d, %Y %-I:%M %p %Z");
-    let preamble = format!("{preamble}\n\nCurrent date/time: {now_str}");
-    let reasoning_system = format!("{preamble}\n\n{TOOL_INSTRUCTIONS}\n\n{RESPONSE_INSTRUCTIONS}");
-    let response_system = format!("{preamble}\n\n{RESPONSE_INSTRUCTIONS}");
+    run_prompt_inner(config, channel, session_id, user_prompt, None).await
+}
+
+/// Run a prompt with custom tools (for evals with mock tool handlers).
+pub async fn run_prompt_with_tools(
+    config: &Config,
+    channel: &str,
+    session_id: &SessionId,
+    user_prompt: &str,
+    tools: Vec<ToolDef>,
+) -> Result<PromptResult> {
+    run_prompt_inner(config, channel, session_id, user_prompt, Some(tools)).await
+}
+
+async fn run_prompt_inner(
+    config: &Config,
+    channel: &str,
+    session_id: &SessionId,
+    user_prompt: &str,
+    custom_tools: Option<Vec<ToolDef>>,
+) -> Result<PromptResult> {
+    // Step 1: Assemble system prompt from channel directory
+    let system_dir = config.system_dir.join(channel);
+    let ctx = build_template_context(channel);
+    let preamble = context::assemble_system_prompt(&system_dir, &ctx)?;
 
     // Step 2: Load session state from disk
     let session_ctx = session::load_session(&config.dynamic_dir, session_id)?;
 
     let client = agent::build_client(config)?;
-    let tools = build_tools(config);
+    let tools = custom_tools.unwrap_or_else(|| build_tools(config));
     let prompt_log_path = prompt_log_path_for(config);
 
     let hook_state = crate::tools::AgentState::new();
 
     let agent = Agent::builder(&client, config)
-        .system(&reasoning_system)
-        .response_system(&response_system)
+        .system(&preamble)
         .tools(&tools)
         .documents(session_ctx.documents)
         .build();
@@ -160,45 +186,37 @@ pub async fn run_prompt_with_system_dir(
     let mut hook = LennyHook {
         state: hook_state.clone(),
         prompt_log_path,
-        preamble: Some(reasoning_system.clone()),
+        preamble: Some(preamble.clone()),
     };
 
     // Step 3: Run agent with history from disk
     let result = agent
         .run(user_prompt, session_ctx.history, &mut hook)
         .await?;
-    let output: AgentOutput = parse_agent_output(&result.answer)?;
 
     let events = std::mem::take(&mut hook_state.lock().unwrap().events);
 
-    let slug = if output.no_response {
+    let answer = strip_slug_tag(&result.answer);
+    let skipped = is_no_response(&answer);
+    let slug = if skipped {
         "no-response".to_string()
     } else {
-        sanitize_slug(&output.slug)
+        extract_slug(&result.answer)
     };
+    let answer = if skipped { String::new() } else { answer };
 
     // Step 4: Persist turn to session directory
-    // Only save the new messages from this run (not the full history which is already on disk)
     let new_messages = extract_new_messages(&result.messages, user_prompt);
     if let Err(e) = session::save_turn(&config.dynamic_dir, session_id, &new_messages, &slug) {
         tracing::warn!(error = %e, "failed to save session turn");
     }
 
-    if output.no_response {
-        Ok(PromptResult {
-            answer: output.answer,
-            slug,
-            skipped: true,
-            events,
-        })
-    } else {
-        Ok(PromptResult {
-            answer: output.answer,
-            slug,
-            skipped: false,
-            events,
-        })
-    }
+    Ok(PromptResult {
+        answer,
+        slug,
+        skipped,
+        events,
+    })
 }
 
 /// Extract only the new messages produced during this run.
@@ -227,14 +245,13 @@ fn extract_new_messages(all_messages: &[Message], user_prompt: &str) -> Vec<Mess
     all_messages.to_vec()
 }
 
-/// Simple completion using the response model. No tools, no hooks.
+/// Simple completion using the reasoning model. No tools, no hooks.
 pub async fn run_completion_typed<T: DeserializeOwned + Send>(
     config: &Config,
     preamble: &str,
     prompt: &str,
 ) -> Result<T> {
-    run_completion_typed_with_model(config, config.provider.response_model(), preamble, prompt)
-        .await
+    run_completion_typed_with_model(config, config.provider.agent_model(), preamble, prompt).await
 }
 
 /// Simple completion with an explicit model name. No tools, no hooks.
@@ -286,10 +303,10 @@ pub async fn run_completion_typed_with_model<T: DeserializeOwned + Send>(
     parse_json_response(&raw)
 }
 
-/// The `once` CLI command: run prompt, print JSON, save turn.
+/// The `once` CLI command: run prompt, print output, save turn.
 pub async fn run(config: &Config, user_prompt: &str) -> Result<()> {
     let session_id = SessionId::new("once", "default");
-    let result = run_prompt(config, &session_id, user_prompt).await?;
+    let result = run_prompt(config, "cli", &session_id, user_prompt).await?;
 
     let tool_calls: Vec<&AgentEvent> = result
         .events
@@ -310,11 +327,6 @@ pub async fn run(config: &Config, user_prompt: &str) -> Result<()> {
     Ok(())
 }
 
-/// Parse AgentOutput from a raw LLM response string.
-fn parse_agent_output(raw: &str) -> Result<AgentOutput> {
-    parse_json_response(raw)
-}
-
 /// Parse JSON from an LLM response into T.
 /// Uses llm_json to repair malformed JSON from LLMs (missing quotes,
 /// trailing commas, prose wrapping, markdown fences, etc).
@@ -326,6 +338,7 @@ fn parse_json_response<T: DeserializeOwned>(raw: &str) -> Result<T> {
     })
 }
 
+#[allow(dead_code)]
 pub fn sanitize_slug(s: &str) -> String {
     s.to_lowercase()
         .split_whitespace()
@@ -380,69 +393,75 @@ fn save_turn_to_references(config: &Config, prompt: &str, result: &PromptResult)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::Deserialize;
 
-    #[derive(Debug, Deserialize, PartialEq)]
-    struct Simple {
-        answer: String,
+    #[test]
+    fn extract_slug_from_tag() {
+        let answer = "The answer is 42. [slug: meaning-of-life]";
+        assert_eq!(extract_slug(answer), "meaning-of-life");
+    }
+
+    #[test]
+    fn extract_slug_fallback() {
+        let answer = "Hello world from here";
+        assert_eq!(extract_slug(answer), "hello-world-from-here");
+    }
+
+    #[test]
+    fn extract_slug_empty() {
+        assert_eq!(extract_slug(""), "unknown");
+    }
+
+    #[test]
+    fn strip_slug_tag_present() {
+        let answer = "The answer is 42. [slug: meaning-of-life]";
+        assert_eq!(strip_slug_tag(answer), "The answer is 42.");
+    }
+
+    #[test]
+    fn strip_slug_tag_absent() {
+        let answer = "The answer is 42.";
+        assert_eq!(strip_slug_tag(answer), "The answer is 42.");
+    }
+
+    #[test]
+    fn no_response_detection() {
+        assert!(is_no_response("[no-response]"));
+        assert!(is_no_response("  [no-response]  "));
+        assert!(is_no_response("Some preamble\n\n[no-response]"));
+        assert!(!is_no_response("Hello"));
     }
 
     #[test]
     fn parse_clean_json() {
+        use serde::Deserialize;
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Simple {
+            answer: String,
+        }
         let r: Simple = parse_json_response(r#"{"answer": "hello"}"#).unwrap();
         assert_eq!(r.answer, "hello");
     }
 
     #[test]
-    fn parse_with_whitespace() {
-        let r: Simple = parse_json_response("  \n{\"answer\": \"hello\"}\n  ").unwrap();
-        assert_eq!(r.answer, "hello");
-    }
-
-    #[test]
     fn parse_markdown_fences() {
+        use serde::Deserialize;
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Simple {
+            answer: String,
+        }
         let input = "```json\n{\"answer\": \"hello\"}\n```";
         let r: Simple = parse_json_response(input).unwrap();
         assert_eq!(r.answer, "hello");
     }
 
     #[test]
-    fn parse_leading_prose() {
-        let input = "Here is the result:\n{\"answer\": \"hello\"}";
-        let r: Simple = parse_json_response(input).unwrap();
-        assert_eq!(r.answer, "hello");
-    }
-
-    #[test]
-    fn parse_trailing_prose() {
-        let input = "{\"answer\": \"hello\"}\n\nI hope that helps!";
-        let r: Simple = parse_json_response(input).unwrap();
-        assert_eq!(r.answer, "hello");
-    }
-
-    #[test]
-    fn parse_leading_and_trailing_prose() {
-        let input = "Sure! Here you go:\n{\"answer\": \"hello\"}\nLet me know if you need more.";
-        let r: Simple = parse_json_response(input).unwrap();
-        assert_eq!(r.answer, "hello");
-    }
-
-    #[test]
-    fn parse_nested_braces_in_string() {
-        let input = r#"{"answer": "use {x} for templating"}"#;
-        let r: Simple = parse_json_response(input).unwrap();
-        assert_eq!(r.answer, "use {x} for templating");
-    }
-
-    #[test]
-    fn parse_escaped_quotes() {
-        let input = r#"{"answer": "she said \"hi\""}"#;
-        let r: Simple = parse_json_response(input).unwrap();
-        assert_eq!(r.answer, "she said \"hi\"");
-    }
-
-    #[test]
     fn parse_fails_on_garbage() {
+        use serde::Deserialize;
+        #[derive(Debug, Deserialize)]
+        struct Simple {
+            #[allow(dead_code)]
+            answer: String,
+        }
         let result: Result<Simple> = parse_json_response("not json at all");
         assert!(result.is_err());
     }

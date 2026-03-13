@@ -10,24 +10,24 @@ use super::notes;
 use crate::agent::{ToolDef, ToolHandler};
 
 #[derive(Debug, Deserialize)]
-struct ExtractToNoteArgs {
+struct ExtractUrlToNoteArgs {
     url: String,
     prompt: String,
     filename: String,
 }
 
-pub struct ExtractToNoteTool {
+pub struct ExtractUrlToNoteTool {
     pub firecrawl: FirecrawlApp,
     pub dynamic_dir: PathBuf,
 }
 
 #[async_trait]
-impl ToolHandler for ExtractToNoteTool {
+impl ToolHandler for ExtractUrlToNoteTool {
     async fn call(&self, args: &serde_json::Value) -> Result<String> {
-        let args: ExtractToNoteArgs = serde_json::from_value(args.clone())?;
+        let args: ExtractUrlToNoteArgs = serde_json::from_value(args.clone())?;
         let filename = notes::sanitize_filename(&args.filename)?;
 
-        tracing::debug!(url = %args.url, prompt = %args.prompt, "extract_to_note: starting");
+        tracing::debug!(url = %args.url, prompt = %args.prompt, "extract_url_to_note: starting");
 
         let params = firecrawl::extract::ExtractParams {
             urls: Some(vec![args.url.clone()]),
@@ -52,7 +52,7 @@ impl ToolHandler for ExtractToNoteTool {
                         format!("\n## {}\n\nSource: {}\n\n{}\n", args.prompt, args.url, text);
                     let path = notes::append_to_note(&self.dynamic_dir, &filename, &section)?;
 
-                    tracing::debug!(path = %path.display(), "extract_to_note: appended");
+                    tracing::debug!(path = %path.display(), "extract_url_to_note: appended");
                     return Ok(format!(
                         "Extracted and appended summary of {} to notes/{filename}",
                         args.url
@@ -68,31 +68,44 @@ impl ToolHandler for ExtractToNoteTool {
     }
 }
 
-impl ExtractToNoteTool {
+pub fn tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "extract_url_to_note".to_string(),
+        description: "Extract information from a URL and save it directly to a note file in one step. Combines URL extraction with file writing — the extracted content is appended to the named file. Use this instead of extract_url + write_note when you want to save extracted content to a file. Ideal for research pipelines gathering information from multiple URLs.".to_string(),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "URL to extract from."
+                },
+                "prompt": {
+                    "type": "string",
+                    "description": "Question or extraction prompt (e.g. 'Summarize the key points of this article')."
+                },
+                "filename": {
+                    "type": "string",
+                    "description": "Note file to append results to (e.g. 'research-draft.md'). Created if it doesn't exist."
+                }
+            },
+            "required": ["url", "prompt", "filename"]
+        }),
+    }
+}
+
+pub fn mock_tool_def() -> ToolDef {
+    ToolDef {
+        tool: tool_definition(),
+        handler: Box::new(crate::agent::MockHandler {
+            response: "Extracted content appended to research.md.".to_string(),
+        }),
+    }
+}
+
+impl ExtractUrlToNoteTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: ToolDefinition {
-                name: "extract_to_note".to_string(),
-                description: "Extract information from a URL by asking a question about it, and append the result to a note file. Uses Firecrawl's extract API. The extracted content goes directly to the file without entering conversation context, keeping token usage low. Use this for research pipelines where you need to gather information from multiple URLs.".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "URL to extract from."
-                        },
-                        "prompt": {
-                            "type": "string",
-                            "description": "Question or extraction prompt (e.g. 'Summarize the key points of this article')."
-                        },
-                        "filename": {
-                            "type": "string",
-                            "description": "Note file to append results to (e.g. 'research-draft.md'). Created if it doesn't exist."
-                        }
-                    },
-                    "required": ["url", "prompt", "filename"]
-                }),
-            },
+            tool: tool_definition(),
             handler: Box::new(self),
         }
     }

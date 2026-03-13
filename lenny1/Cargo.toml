@@ -24,7 +24,6 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 futures-util = "0.3"
 url = "2"
 schemars = "1"
-html-to-markdown-rs = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 fastembed = "5"
@@ -35,6 +34,7 @@ pulldown-cmark = "0.13.1"
 chrono-tz = "0.10.4"
 tiktoken-rs = "0.9.1"
 llm_json = "1.0.2"
+minijinja = "2"
 
 [profile.dev.package.firecrawl]
 opt-level = 0

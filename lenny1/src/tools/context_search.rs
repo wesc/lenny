@@ -59,33 +59,46 @@ impl ToolHandler for ContextSearchTool {
     }
 }
 
+pub fn tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "context_search".to_string(),
+        description: "Search past conversations and documents by semantic similarity. \
+             Optionally filter by a time range. Returns relevant context passages."
+            .to_string(),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query describing what information to find"
+                },
+                "start_time": {
+                    "type": "string",
+                    "description": "Optional start of time range (ISO 8601, e.g. '2025-11-01T00:00:00Z')"
+                },
+                "end_time": {
+                    "type": "string",
+                    "description": "Optional end of time range (ISO 8601, e.g. '2025-11-05T00:00:00Z')"
+                }
+            },
+            "required": ["query"]
+        }),
+    }
+}
+
+pub fn mock_tool_def() -> ToolDef {
+    ToolDef {
+        tool: tool_definition(),
+        handler: Box::new(crate::agent::MockHandler {
+            response: "No relevant context found.".to_string(),
+        }),
+    }
+}
+
 impl ContextSearchTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: ToolDefinition {
-                name: "context_search".to_string(),
-                description: "Search past conversations and documents by semantic similarity. \
-                     Optionally filter by a time range. Returns relevant context passages."
-                    .to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "The search query describing what information to find"
-                        },
-                        "start_time": {
-                            "type": "string",
-                            "description": "Optional start of time range (ISO 8601, e.g. '2025-11-01T00:00:00Z')"
-                        },
-                        "end_time": {
-                            "type": "string",
-                            "description": "Optional end of time range (ISO 8601, e.g. '2025-11-05T00:00:00Z')"
-                        }
-                    },
-                    "required": ["query"]
-                }),
-            },
+            tool: tool_definition(),
             handler: Box::new(self),
         }
     }

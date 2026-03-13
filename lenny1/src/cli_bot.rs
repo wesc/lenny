@@ -34,15 +34,13 @@ pub async fn chat_loop<R: BufRead, W: Write>(
             break;
         }
 
-        let system_dir = config.system_dir.join("cli");
-        let result =
-            match once::run_prompt_with_system_dir(config, &system_dir, &session_id, line).await {
-                Ok(r) => r,
-                Err(e) => {
-                    writeln!(output, "\n\x1b[38;5;245m[no response: {e}]\x1b[0m\n")?;
-                    continue;
-                }
-            };
+        let result = match once::run_prompt(config, "cli", &session_id, line).await {
+            Ok(r) => r,
+            Err(e) => {
+                writeln!(output, "\n\x1b[38;5;245m[no response: {e}]\x1b[0m\n")?;
+                continue;
+            }
+        };
 
         if !result.skipped {
             writeln!(output, "\n\x1b[38;5;245m{}\x1b[0m\n", result.answer)?;

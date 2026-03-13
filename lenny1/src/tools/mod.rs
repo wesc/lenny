@@ -1,49 +1,47 @@
 mod bluesky_trending;
 mod context_search;
-mod extract_to_note;
+mod extract_url;
+mod extract_url_to_note;
 mod lookup_reference;
 mod notes;
 mod random_letter;
 mod random_number;
 mod read_note;
-mod scrape_url;
-mod summarize_url;
-mod web_scrape;
+mod web_search;
 mod write_note;
 
 pub use bluesky_trending::{BlueskyTrendingTool, fetch_trending};
 pub use context_search::ContextSearchTool;
-pub use extract_to_note::ExtractToNoteTool;
+pub use extract_url::ExtractUrlTool;
+pub use extract_url_to_note::ExtractUrlToNoteTool;
 pub use lookup_reference::LookupReferenceTool;
 pub use random_letter::RandomLetterTool;
 pub use random_number::RandomNumberTool;
 pub use read_note::ReadNoteTool;
-pub use scrape_url::ScrapeUrlTool;
-pub use summarize_url::SummarizeUrlTool;
-pub use web_scrape::WebScrapeTool;
+pub use web_search::WebSearchTool;
 pub use write_note::WriteNoteTool;
 
-use serde::{Deserialize, Serialize};
+/// Build mock versions of all tools (same definitions, stub handlers). Used by evals.
+pub fn build_mock_tools() -> Vec<crate::agent::ToolDef> {
+    vec![
+        random_number::mock_tool_def(),
+        random_letter::mock_tool_def(),
+        context_search::mock_tool_def(),
+        lookup_reference::mock_tool_def(),
+        extract_url::mock_tool_def(),
+        web_search::mock_tool_def(),
+        extract_url_to_note::mock_tool_def(),
+        write_note::mock_tool_def(),
+        read_note::mock_tool_def(),
+        bluesky_trending::mock_tool_def(),
+    ]
+}
+
+use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::agent;
-
-// ---- Structured output ----
-
-/// The agent's structured response, enforced via output schema.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentOutput {
-    /// Set to true when the conversation does not need a response from you.
-    #[serde(default)]
-    pub no_response: bool,
-    /// Your complete final answer to the user's question.
-    #[serde(default)]
-    pub answer: String,
-    /// A short slug (2-4 words, lowercase, hyphens) summarizing the topic.
-    #[serde(default)]
-    pub slug: String,
-}
 
 // ---- Shared agent state ----
 

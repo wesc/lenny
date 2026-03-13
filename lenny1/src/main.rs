@@ -49,6 +49,9 @@ enum Command {
     Eval {
         #[command(subcommand)]
         suite: EvalSuite,
+        /// Number of times to repeat the eval suite
+        #[arg(long, default_value = "1", global = true)]
+        repeat: usize,
     },
     /// Matrix chat bot
     Matrix {
@@ -100,7 +103,7 @@ enum ResearchCmd {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Clone, Copy)]
 enum EvalSuite {
     /// Run basic eval battery
     Basic,
@@ -153,6 +156,40 @@ enum FactCmd {
     Dump,
 }
 
+async fn run_eval_suite(
+    config: &config::Config,
+    suite: EvalSuite,
+    repeat: usize,
+) -> anyhow::Result<()> {
+    let mut failures = 0;
+    for i in 0..repeat {
+        if repeat > 1 {
+            eprintln!("\n=== Run {}/{repeat} ===\n", i + 1);
+        }
+        let result = match suite {
+            EvalSuite::Basic => evals::basic::run(config).await,
+            EvalSuite::ContextualChats => evals::contextual_chats::run(config).await,
+            EvalSuite::ContextualTexts => evals::contextual_texts::run(config).await,
+            EvalSuite::ContextualAll => evals::contextual_all::run(config).await,
+            EvalSuite::Fact => evals::fact::run(config).await,
+            EvalSuite::All => evals::all::run(config).await,
+        };
+        if result.is_err() {
+            failures += 1;
+        }
+    }
+    if repeat > 1 {
+        eprintln!(
+            "\n=== Summary: {}/{repeat} runs passed ===",
+            repeat - failures
+        );
+    }
+    if failures > 0 {
+        anyhow::bail!("{failures}/{repeat} runs had failures");
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -172,14 +209,8 @@ async fn main() {
             once::run(&config, &prompt).await
         }
         Command::Dream { force_digest } => dream::run(&config, force_digest).await,
-        Command::Eval { suite } => match suite {
-            EvalSuite::Basic => evals::run(&config).await,
-            EvalSuite::ContextualChats => evals::contextual_chats::run(&config).await,
-            EvalSuite::ContextualTexts => evals::contextual_texts::run(&config).await,
-            EvalSuite::ContextualAll => evals::contextual_all::run(&config).await,
-            EvalSuite::Fact => evals::fact::run(&config).await,
-            EvalSuite::All => evals::all::run(&config).await,
-        },
+        Command::Eval { suite, repeat } => run_eval_suite(&config, suite, repeat).await,
+
         Command::Matrix { cmd } => match cmd {
             MatrixCmd::Bot { reset } => matrix_bot::run(&config, reset).await,
         },

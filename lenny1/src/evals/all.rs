@@ -9,7 +9,7 @@ pub async fn run(config: &Config) -> Result<()> {
     let mut suites_failed = 0;
 
     eprintln!("\n=== eval basic ===\n");
-    match super::run(config).await {
+    match super::basic::run(config).await {
         Ok(()) => suites_passed += 1,
         Err(e) => {
             eprintln!("  FAILED: {e}");

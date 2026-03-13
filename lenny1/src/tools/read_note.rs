@@ -24,31 +24,46 @@ impl ToolHandler for ReadNoteTool {
         let filename = notes::sanitize_filename(&args.filename)?;
 
         let path = notes::notes_dir(&self.dynamic_dir)?.join(&filename);
-        let content = std::fs::read_to_string(&path)
-            .map_err(|_| anyhow::anyhow!("Note not found: notes/{filename}"))?;
+        match std::fs::read_to_string(&path) {
+            Ok(content) => {
+                tracing::debug!(path = %path.display(), len = content.len(), "read_note");
+                Ok(content)
+            }
+            Err(_) => Ok(format!("Note not found: notes/{filename}")),
+        }
+    }
+}
 
-        tracing::debug!(path = %path.display(), len = content.len(), "read_note");
-        Ok(content)
+pub fn tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "read_note".to_string(),
+        description: "Read a note file from the notes directory. Use this to read back accumulated research or other notes you have previously written.".to_string(),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "filename": {
+                    "type": "string",
+                    "description": "Filename to read (e.g. 'research-draft.md')."
+                }
+            },
+            "required": ["filename"]
+        }),
+    }
+}
+
+pub fn mock_tool_def() -> ToolDef {
+    ToolDef {
+        tool: tool_definition(),
+        handler: Box::new(crate::agent::MockHandler {
+            response: "Contents of research.md:\n\nSome research notes here.".to_string(),
+        }),
     }
 }
 
 impl ReadNoteTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: ToolDefinition {
-                name: "read_note".to_string(),
-                description: "Read a note file from the notes directory. Use this to read back accumulated research or other notes you have previously written.".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "filename": {
-                            "type": "string",
-                            "description": "Filename to read (e.g. 'research-draft.md')."
-                        }
-                    },
-                    "required": ["filename"]
-                }),
-            },
+            tool: tool_definition(),
             handler: Box::new(self),
         }
     }

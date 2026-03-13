@@ -227,32 +227,40 @@ impl ToolHandler for BlueskyTrendingTool {
     }
 }
 
+pub fn tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "bluesky_trending".to_string(),
+        description: "Search Bluesky for trending links matching the given keywords. Returns a JSON object with top shared links ranked by engagement. Each query is searched separately and results are merged and ranked.".to_string(),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "queries": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Keywords to search for (e.g. [\"rust programming\", \"cargo build system\"]). Each string is a separate search query."
+                },
+                "since": {
+                    "type": "string",
+                    "description": "Start date (YYYY-MM-DD). Defaults to 24 hours ago."
+                },
+                "until": {
+                    "type": "string",
+                    "description": "End date (YYYY-MM-DD). Defaults to now."
+                }
+            },
+            "required": ["queries"]
+        }),
+    }
+}
+
+pub fn mock_tool_def() -> ToolDef {
+    ToolDef { tool: tool_definition(), handler: Box::new(crate::agent::MockHandler { response: r#"{"links": [{"url": "https://example.com/ai-news", "title": "AI News", "shares": 42}]}"#.to_string() }) }
+}
+
 impl BlueskyTrendingTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: ToolDefinition {
-                name: "bluesky_trending".to_string(),
-                description: "Search Bluesky for trending links matching the given keywords. Returns a JSON object with top shared links ranked by engagement. Each query is searched separately and results are merged and ranked.".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "queries": {
-                            "type": "array",
-                            "items": { "type": "string" },
-                            "description": "Keywords to search for (e.g. [\"rust programming\", \"cargo build system\"]). Each string is a separate search query."
-                        },
-                        "since": {
-                            "type": "string",
-                            "description": "Start date (YYYY-MM-DD). Defaults to 24 hours ago."
-                        },
-                        "until": {
-                            "type": "string",
-                            "description": "End date (YYYY-MM-DD). Defaults to now."
-                        }
-                    },
-                    "required": ["queries"]
-                }),
-            },
+            tool: tool_definition(),
             handler: Box::new(self),
         }
     }

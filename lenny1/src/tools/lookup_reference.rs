@@ -75,23 +75,36 @@ impl ToolHandler for LookupReferenceTool {
     }
 }
 
+pub fn tool_definition() -> ToolDefinition {
+    ToolDefinition {
+        name: "lookup_reference".to_string(),
+        description: "Read a file from the references directory by its relative path. Use this to retrieve past conversation turns, uploaded documents, or any reference material. Always use this tool when asked to look up or read a reference file.".to_string(),
+        parameters: json!({
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative path to the reference file (e.g. 'turns/20260228-120000-some-topic.json')"
+                }
+            },
+            "required": ["path"]
+        }),
+    }
+}
+
+pub fn mock_tool_def() -> ToolDef {
+    ToolDef {
+        tool: tool_definition(),
+        handler: Box::new(crate::agent::MockHandler {
+            response: "File not found.".to_string(),
+        }),
+    }
+}
+
 impl LookupReferenceTool {
     pub fn tool_def(self) -> ToolDef {
         ToolDef {
-            tool: ToolDefinition {
-                name: "lookup_reference".to_string(),
-                description: "Look up a reference file by its relative path within the references directory. Returns the file contents.".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Relative path to the reference file (e.g. 'turns/20260228-120000-some-topic.json')"
-                        }
-                    },
-                    "required": ["path"]
-                }),
-            },
+            tool: tool_definition(),
             handler: Box::new(self),
         }
     }

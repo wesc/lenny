@@ -113,7 +113,7 @@ fn is_mentioned(
 }
 
 /// Per-room consumer: accumulates messages, waits for 1s of quiet, then responds once.
-/// Session persistence is handled by `run_prompt_with_system_dir`.
+/// Session persistence is handled by `run_prompt`.
 async fn room_debounce_consumer(
     mut rx: mpsc::UnboundedReceiver<PendingMessage>,
     config: Config,
@@ -161,8 +161,7 @@ async fn room_debounce_consumer(
 
         // Session ID per room: matrix/{host}/{room_slug}
         let session_id = SessionId::new(&format!("matrix/{host}"), &sanitized_id);
-        let system_dir = config.system_dir.join("matrix");
-        match once::run_prompt_with_system_dir(&config, &system_dir, &session_id, &prompt).await {
+        match once::run_prompt(&config, "matrix", &session_id, &prompt).await {
             Ok(result) if !result.skipped => {
                 let html = markdown_to_html(&result.answer);
                 let mut content = RoomMessageEventContent::text_html(&result.answer, &html);
