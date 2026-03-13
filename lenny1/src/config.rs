@@ -17,6 +17,12 @@ pub enum ProviderConfig {
         agent_model: Option<String>,
         #[serde(default)]
         comprehension_model: Option<String>,
+        /// Preferred provider ordering (e.g. ["Fireworks", "Together"]).
+        #[serde(default)]
+        provider_order: Vec<String>,
+        /// Allowed quantizations (e.g. ["bf16", "fp8"]).
+        #[serde(default)]
+        quantizations: Vec<String>,
     },
 }
 
@@ -29,6 +35,8 @@ impl ProviderConfig {
             model: Some("test-model".to_string()),
             agent_model: None,
             comprehension_model: None,
+            provider_order: Vec::new(),
+            quantizations: Vec::new(),
         }
     }
 
@@ -53,6 +61,29 @@ impl ProviderConfig {
         comprehension_model
             .as_deref()
             .unwrap_or_else(|| self.agent_model())
+    }
+
+    /// OpenRouter provider routing params, if `provider_order` is set.
+    pub fn provider_params(&self) -> Option<serde_json::Value> {
+        let ProviderConfig::OpenRouter {
+            provider_order,
+            quantizations,
+            ..
+        } = self;
+        if provider_order.is_empty() && quantizations.is_empty() {
+            None
+        } else {
+            let mut provider = serde_json::json!({
+                "allow_fallbacks": false,
+            });
+            if !provider_order.is_empty() {
+                provider["order"] = serde_json::json!(provider_order);
+            }
+            if !quantizations.is_empty() {
+                provider["quantizations"] = serde_json::json!(quantizations);
+            }
+            Some(provider)
+        }
     }
 
     /// Short display string like "openrouter/model-name".

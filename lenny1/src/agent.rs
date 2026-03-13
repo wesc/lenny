@@ -217,6 +217,7 @@ pub struct Agent<'a> {
     documents: Vec<Document>,
     max_iterations: usize,
     max_tokens: u64,
+    provider_params: Option<serde_json::Value>,
 }
 
 /// Builder for Agent.
@@ -228,6 +229,7 @@ pub struct AgentBuilder<'a> {
     documents: Vec<Document>,
     max_iterations: usize,
     max_tokens: u64,
+    provider_params: Option<serde_json::Value>,
 }
 
 impl<'a> AgentBuilder<'a> {
@@ -261,6 +263,7 @@ impl<'a> AgentBuilder<'a> {
             documents: self.documents,
             max_iterations: self.max_iterations,
             max_tokens: self.max_tokens,
+            provider_params: self.provider_params,
         }
     }
 }
@@ -275,6 +278,7 @@ impl<'a> Agent<'a> {
             documents: vec![],
             max_iterations: config.max_iterations,
             max_tokens: 2048,
+            provider_params: config.provider.provider_params(),
         }
     }
 
@@ -306,9 +310,15 @@ impl<'a> Agent<'a> {
             temperature: None,
             max_tokens: None,
             tool_choice: Some(ToolChoice::Auto),
-            additional_params: Some(serde_json::json!({
-                "max_tokens": self.max_tokens,
-            })),
+            additional_params: Some({
+                let mut params = serde_json::json!({
+                    "max_tokens": self.max_tokens,
+                });
+                if let Some(ref provider) = self.provider_params {
+                    params["provider"] = provider.clone();
+                }
+                params
+            }),
             output_schema: None,
         };
 
